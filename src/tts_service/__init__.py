@@ -3,44 +3,33 @@ from models.service import ServiceType
 
 from .base import TTSService
 from .edge import EdgeService
+from .dots import DotsTTSService
 from .fish_speech import FishSpeechService
+from .fish_audio import FishAudioService
 from .gpt_sovits import GPTSovitsService
 from .minimax import MinimaxService
 from .piper import PiperService
 
-_default_tts_service = None
 
-
-def get_tts_service() -> FishSpeechService | GPTSovitsService | MinimaxService | PiperService | EdgeService:
-    """获取TTS服务"""
-
-    global _default_tts_service
-    if _default_tts_service is not None:
-        return _default_tts_service
-    model_type = cfg.activeTTS.value
-    if model_type == ServiceType.FISH_SPEECH:
-        _default_tts_service = FishSpeechService()
-
-    elif model_type == ServiceType.GPT_SOVITS:
-        _default_tts_service = GPTSovitsService()
-
-    elif model_type == ServiceType.MINIMAX:
-        _default_tts_service = MinimaxService()
-
-    elif model_type == ServiceType.PIPER:
-        _default_tts_service = PiperService()
-
-    elif model_type == ServiceType.EDGE:
-        _default_tts_service = EdgeService()
-
-    else:
-        raise ValueError(f'Invalid TTS service: {model_type}')
-    return _default_tts_service
+def get_tts_service() -> TTSService:
+    """Create a lightweight adapter with the current engine and configuration."""
+    services = {
+        ServiceType.DOTS: DotsTTSService,
+        ServiceType.FISH_SPEECH: FishSpeechService,
+        ServiceType.FISH_AUDIO: FishAudioService,
+        ServiceType.GPT_SOVITS: GPTSovitsService,
+        ServiceType.MINIMAX: MinimaxService,
+        ServiceType.PIPER: PiperService,
+        ServiceType.EDGE: EdgeService,
+    }
+    return services[cfg.activeTTS.value]()
 
 
 __all__ = [
+    'DotsTTSService',
     'EdgeService',
     'FishSpeechService',
+    'FishAudioService',
     'GPTSovitsService',
     'MinimaxService',
     'PiperService',

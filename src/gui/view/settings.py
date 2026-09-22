@@ -36,6 +36,11 @@ from gui.components import FloatRangeSettingCard, IntSettingCard, StrSettingCard
 from gui.components.alias_dict_card import AliasDictCard
 from gui.components.dict_edit_card import DictEditCard
 from gui.icons import CustomIcon
+from .tts_settings import TTSSettingsInterface
+from .user_dictionary import UserDictionaryInterface
+from gui.components.sovits_cards import SovitsFolderCard, SovitsModelCard, SovitsApiCard, SovitsReferenceCard
+from gui.components.tts_service_card import TTSServiceCard
+from gui.components.fish_audio_cards import fish_audio_group
 
 
 class SettingsInterface(ScrollArea):
@@ -238,18 +243,104 @@ class SettingsInterface(ScrollArea):
         self.giftMergeCard.addGroupWidget(self.giftMergeWindowCard)
 
         self.aliasDictCard = AliasDictCard(self.biliGroup)
+        self.messageAliasDictCard = DictEditCard(
+            config_item=cfg.messageAliasDict,
+            icon=FIF.BOOK_SHELF,
+            title='消息字典 {message}',
+            content='只替换弹幕和醒目留言正文；长词优先，替换结果不重复替换',
+            key_label='原词',
+            value_label='替换为',
+            parent=self.biliGroup,
+        )
+        self.audioClipDictCard = DictEditCard(
+            config_item=cfg.audioClipDict,
+            icon=FIF.MUSIC,
+            title='关键词音频',
+            content='在原始消息中匹配关键词，播放指定文件；长词优先，支持 WAV/MP3/FLAC/OGG',
+            key_label='关键词',
+            value_label='音频路径',
+            key_placeholder='例如：咕咕嘎嘎',
+            value_placeholder='本机音频文件的绝对路径',
+            parent=self.biliGroup,
+            file_values=True,
+        )
+        self.dotsGroup = SettingCardGroup('dots.tts 设置', self.scrollWidget)
+        for item, title, content in (
+            (cfg.dotsSpeed, '语速', '0.5–2.0 倍，1.0 为原速；变速不变调，流式播放仍然生效'),
+            (cfg.dotsVolume, '音量', '0–2.0 倍，1.0 为原音量，0 为静音；仅影响 dots.tts 语音'),
+        ):
+            self.dotsGroup.addSettingCard(
+                FloatRangeSettingCard(
+                    configItem=item,
+                    icon=FIF.VOLUME,
+                    title=title,
+                    content=content,
+                    step=0.1,
+                    decimals=1,
+                    parent=self.dotsGroup,
+                )
+            )
+        self.dotsGroup.addSettingCard(
+            SwitchSettingCard(
+                configItem=cfg.dotsStreaming,
+                icon=FIF.PLAY,
+                title='流式播放（低延迟）',
+                content='收到首段音频就播放；关键词文件按顺序插播。关闭后整句合成再播放。',
+                parent=self.dotsGroup,
+            )
+        )
+        for item, title, content in (
+            (cfg.dotsApiUrl, 'API 地址', '本机 dots.tts 服务地址，默认 http://127.0.0.1:9881，支持完整 /tts 地址'),
+            (
+                cfg.dotsVoice,
+                '参考音色文件名',
+                '优先读取本机 default_prompts；留空取首个音频，可填 hongchang.wav 或 zhubo.wav',
+            ),
+            (cfg.dotsPromptText, '参考音频文本', '留空自动读取同名 txt 或 default_prompts 中的 prompt_text 映射'),
+            (cfg.dotsLanguage, '语言', '留空沿用服务设置；可填 zh、en 等语言代码'),
+            (cfg.dotsFfmpegPath, 'FFmpeg 路径', '变速不变调所用的 ffmpeg.exe；原速时无需 FFmpeg'),
+        ):
+            self.dotsGroup.addSettingCard(
+                StrSettingCard(
+                    configItem=item,
+                    icon=FIF.EDIT,
+                    title=title,
+                    content=content,
+                    parent=self.dotsGroup,
+                )
+            )
+        self.dotsGroup.addSettingCard(
+            RangeSettingCard(
+                configItem=cfg.dotsNumSteps,
+                icon=FIF.ROBOT,
+                title='采样步数',
+                content='0 沿用服务默认值；1–64 覆盖步数',
+                parent=self.dotsGroup,
+            )
+        )
+        self.dotsGroup.addSettingCard(
+            RangeSettingCard(
+                configItem=cfg.dotsTimeout,
+                icon=FIF.STOP_WATCH,
+                title='请求超时（秒）',
+                content='模型预热或长弹幕需要更长等待时间',
+                parent=self.dotsGroup,
+            )
+        )
+        self.dotsGroup.addSettingCard(
+            SwitchSettingCard(
+                configItem=cfg.dotsNormalizeText,
+                icon=FIF.FONT,
+                title='文本规整',
+                content='由 dots.tts 将数字和符号转为读法',
+                parent=self.dotsGroup,
+            )
+        )
 
         # TTS 服务通用设置组
         self.ttsGroup = SettingCardGroup('文字转语音（TTS）设置', self.scrollWidget)
 
-        self.activeTTSCard = ComboBoxSettingCard(
-            configItem=cfg.activeTTS,
-            icon=FIF.MICROPHONE,
-            title='使用的TTS服务',
-            content='设置使用的TTS服务',
-            texts=[item.description for item in SUPPORTED_SERVICES.values()],
-            parent=self.ttsGroup,
-        )
+        self.activeTTSCard = TTSServiceCard(self.ttsGroup)
 
         # Minimax 服务设置组
         self.minimaxGroup = SettingCardGroup('Minimax 设置', self.scrollWidget)
@@ -341,27 +432,17 @@ class SettingsInterface(ScrollArea):
             configItem=cfg.gptSovitsApiUrl,
             icon=FIF.LINK,
             title='API 地址',
-            content='设置 GPT-SoVITS TTS 服务的 API 地址',
+            content='本机默认 9880；WebUI 的 9872/19874 不是专用 API 地址',
             parent=self.gptSovitsGroup,
-            placeholder='http://localhost:19874',
+            placeholder='http://127.0.0.1:9880',
         )
 
-        self.gptSovitsSovitsModelCard = StrSettingCard(
-            configItem=cfg.gptSovitsSovitsModel,
-            icon=FIF.DOCUMENT,
-            title='SoVITS 模型权重',
-            content='设置 SoVITS 模型权重文件路径',
-            parent=self.gptSovitsGroup,
-            placeholder='模型文件路径',
-        )
-
-        self.gptSovitsGptModelCard = StrSettingCard(
-            configItem=cfg.gptSovitsGptModel,
-            icon=FIF.DOCUMENT,
-            title='GPT 模型权重',
-            content='设置 GPT 模型权重文件路径',
-            parent=self.gptSovitsGroup,
-            placeholder='模型文件路径',
+        self.gptSovitsFolderCard = SovitsFolderCard(self.gptSovitsGroup)
+        self.gptSovitsModelCard = SovitsModelCard(self.gptSovitsGroup)
+        self.gptSovitsStartCard = SovitsApiCard(self.gptSovitsGroup)
+        self.gptSovitsStreamingCard = SwitchSettingCard(
+            configItem=cfg.gptSovitsStreaming, icon=FIF.PLAY, title='流式播放',
+            content='生成一段就播放一段；选择“不切”时自动按标点分段', parent=self.gptSovitsGroup,
         )
 
         self.gptSovitsTextLangCard = ComboBoxSettingCard(
@@ -373,11 +454,11 @@ class SettingsInterface(ScrollArea):
             parent=self.gptSovitsGroup,
         )
 
-        self.gptSovitsRefAudioPathCard = StrSettingCard(
+        self.gptSovitsRefAudioPathCard = SovitsReferenceCard(
             configItem=cfg.gptSovitsRefAudioPath,
             icon=FIF.MUSIC,
             title='参考音频路径',
-            content='设置参考音频文件路径',
+            content='按角色自动记忆，切换模型时恢复',
             parent=self.gptSovitsGroup,
             placeholder='音频文件路径',
         )
@@ -386,7 +467,7 @@ class SettingsInterface(ScrollArea):
             configItem=cfg.gptSovitsRefText,
             icon=CustomIcon.FORMAT_QUOTE,
             title='参考文本',
-            content='设置参考音频对应的文本内容',
+            content='填写参考音频的原文，按角色自动记忆',
             parent=self.gptSovitsGroup,
             placeholder='参考文本内容',
         )
@@ -601,6 +682,8 @@ class SettingsInterface(ScrollArea):
             texts=[device.name for device in audio_player.get_output_devices()],
         )
 
+        self.fishAudioGroup, self.fishAudioCards = fish_audio_group(self.scrollWidget, credentials=True)
+
         # 初始化布局
         self._init_layout()
         self._connect_signals()
@@ -693,7 +776,6 @@ class SettingsInterface(ScrollArea):
         self.biliGroup.addSettingCard(self.guardOnTextCard)
         self.biliGroup.addSettingCard(self.superChatOnTextCard)
         self.biliGroup.addSettingCard(self.giftMergeCard)
-        self.biliGroup.addSettingCard(self.aliasDictCard)
 
         # 添加 TTS 服务通用设置卡片
         self.ttsGroup.addSettingCard(self.activeTTSCard)
@@ -711,9 +793,11 @@ class SettingsInterface(ScrollArea):
         self.fishSpeechGroup.addSettingCard(self.fishSpeechApiUrlCard)
 
         # 添加 GPT-SoVITS 服务设置卡片
+        self.gptSovitsGroup.addSettingCard(self.gptSovitsFolderCard)
+        self.gptSovitsGroup.addSettingCard(self.gptSovitsModelCard)
+        self.gptSovitsGroup.addSettingCard(self.gptSovitsStartCard)
+        self.gptSovitsGroup.addSettingCard(self.gptSovitsStreamingCard)
         self.gptSovitsGroup.addSettingCard(self.gptSovitsApiUrlCard)
-        self.gptSovitsGroup.addSettingCard(self.gptSovitsSovitsModelCard)
-        self.gptSovitsGroup.addSettingCard(self.gptSovitsGptModelCard)
         self.gptSovitsGroup.addSettingCard(self.gptSovitsTextLangCard)
         self.gptSovitsGroup.addSettingCard(self.gptSovitsRefAudioPathCard)
         self.gptSovitsGroup.addSettingCard(self.gptSovitsRefTextCard)
@@ -752,12 +836,9 @@ class SettingsInterface(ScrollArea):
         self.expandLayout.addWidget(self.personalGroup)
         self.expandLayout.addWidget(self.biliGroup)
         self.expandLayout.addWidget(self.playerGroup)
-        self.expandLayout.addWidget(self.ttsGroup)
-        self.expandLayout.addWidget(self.minimaxGroup)
-        self.expandLayout.addWidget(self.fishSpeechGroup)
-        self.expandLayout.addWidget(self.gptSovitsGroup)
-        self.expandLayout.addWidget(self.piperGroup)
-        self.expandLayout.addWidget(self.edgeGroup)
+
+        self.tts_interface = TTSSettingsInterface(self)
+        self.user_dictionary_interface = UserDictionaryInterface(self)
 
         # 设置滚动区域
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

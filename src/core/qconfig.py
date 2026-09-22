@@ -25,13 +25,16 @@ from models.service import ServiceType
 from .const import (
     DATA_DIR,
     EDGE_VOICES,
+    FISH_AUDIO_MODELS,
     GPT_SOVITS_LANGUAGES,
     GPT_SOVITS_TEXT_SPLIT_METHODS,
     MINIMAX_ERROR_VOICE_ID,
     MINIMAX_MODELS,
     SUPPORTED_SERVICES,
+    VISIBLE_TTS_SERVICES,
 )
 from .player import audio_player
+from .fish_voices import normalize_voice_id
 
 
 class ConfigGroup(StrEnum):
@@ -41,6 +44,7 @@ class ConfigGroup(StrEnum):
     TTS_SERVICE = 'TTSService'
     MINIMAX_SERVICE = 'MinimaxService'
     FISH_SPEECH_SERVICE = 'FishSpeechService'
+    FISH_AUDIO_SERVICE = 'FishAudioService'
     GPT_SOVITS_SERVICE = 'GptSovitsService'
     PIPER_SERVICE = 'PiperService'
     EDGE_SERVICE = 'EdgeService'
@@ -352,6 +356,31 @@ class Config(QConfig):
         validator=DictValidator(),
     )
 
+    messageAliasDict = ConfigItem(
+        group=ConfigGroup.BILI_SERVICE,
+        name='MessageAliasDict',
+        default={},
+        validator=DictValidator(),
+    )
+    audioClipDict = ConfigItem(
+        group=ConfigGroup.BILI_SERVICE,
+        name='AudioClipDict',
+        default={},
+        validator=DictValidator(),
+    )
+
+    dotsApiUrl = ConfigItem('DotsTTSService', 'ApiUrl', 'http://127.0.0.1:9881')
+    dotsVoice = ConfigItem('DotsTTSService', 'Voice', '')
+    dotsPromptText = ConfigItem('DotsTTSService', 'PromptText', '')
+    dotsLanguage = ConfigItem('DotsTTSService', 'Language', '')
+    dotsNumSteps = RangeConfigItem('DotsTTSService', 'NumSteps', 0, RangeValidator(0, 64))
+    dotsNormalizeText = ConfigItem('DotsTTSService', 'NormalizeText', True, BoolValidator())
+    dotsStreaming = ConfigItem('DotsTTSService', 'Streaming', True, BoolValidator())
+    dotsSpeed = RangeConfigItem('DotsTTSService', 'Speed', 1.0, RangeValidator(0.5, 2.0))
+    dotsVolume = RangeConfigItem('DotsTTSService', 'Volume', 1.0, RangeValidator(0.0, 2.0))
+    dotsFfmpegPath = ConfigItem('DotsTTSService', 'FfmpegPath', r'E:\AITTS\ffmpeg\bin\ffmpeg.exe')
+    dotsTimeout = RangeConfigItem('DotsTTSService', 'Timeout', 180, RangeValidator(5, 600))
+
     giftMergeOn = ConfigItem(
         group=ConfigGroup.BILI_SERVICE,
         name=ConfigKey.GIFT_MERGE_ON,
@@ -384,7 +413,7 @@ class Config(QConfig):
     activeTTS = OptionsConfigItem(
         group=ConfigGroup.TTS_SERVICE,
         name=ConfigKey.ACTIVE_TTS,
-        default=ServiceType.MINIMAX,
+        default=ServiceType.DOTS,
         validator=OptionsValidator(list(SUPPORTED_SERVICES.keys())),
     )
 
@@ -445,11 +474,35 @@ class Config(QConfig):
         default='http://localhost:8080/v1/tts',
     )
 
+    # Hosted Fish Audio is separate from the legacy local Fish Speech server.
+    fishAudioApiKey = ConfigItem(ConfigGroup.FISH_AUDIO_SERVICE, 'ApiKey', '')
+    fishAudioModel = OptionsConfigItem(
+        ConfigGroup.FISH_AUDIO_SERVICE, 'Model', 's2.1-pro-free', OptionsValidator(FISH_AUDIO_MODELS),
+    )
+    fishAudioReferenceId = ConfigItem(ConfigGroup.FISH_AUDIO_SERVICE, 'ReferenceId', '')
+    fishAudioVoices = ConfigItem(ConfigGroup.FISH_AUDIO_SERVICE, 'Voices', {}, DictValidator())
+    fishAudioStreaming = ConfigItem(ConfigGroup.FISH_AUDIO_SERVICE, 'Streaming', True, BoolValidator())
+    fishAudioSpeed = RangeConfigItem(ConfigGroup.FISH_AUDIO_SERVICE, 'Speed', 1.0, RangeValidator(0.5, 2.0))
+    fishAudioVolume = RangeConfigItem(ConfigGroup.FISH_AUDIO_SERVICE, 'Volume', 0.0, RangeValidator(-20.0, 20.0))
+    fishAudioTemperature = RangeConfigItem(ConfigGroup.FISH_AUDIO_SERVICE, 'Temperature', 0.7, RangeValidator(0.0, 1.0))
+    fishAudioTopP = RangeConfigItem(ConfigGroup.FISH_AUDIO_SERVICE, 'TopP', 0.7, RangeValidator(0.0, 1.0))
+    fishAudioLatency = OptionsConfigItem(
+        ConfigGroup.FISH_AUDIO_SERVICE, 'Latency', 'normal', OptionsValidator(['normal', 'balanced', 'low']),
+    )
+    fishAudioTimeout = RangeConfigItem(ConfigGroup.FISH_AUDIO_SERVICE, 'Timeout', 180, RangeValidator(5, 600))
+
     # GPT-SoVITS TTS 服务配置
+    gptSovitsFolder = ConfigItem(ConfigGroup.GPT_SOVITS_SERVICE, 'InstallFolder', '')
+    gptSovitsStreaming = ConfigItem(ConfigGroup.GPT_SOVITS_SERVICE, 'Streaming', True, BoolValidator())
+    gptSovitsReferences = ConfigItem(ConfigGroup.GPT_SOVITS_SERVICE, 'ModelReferences', {})
+    gptSovitsUserModels = ConfigItem(ConfigGroup.GPT_SOVITS_SERVICE, 'UsernameModels', {})
+    gptSovitsUserModelsEnabled = ConfigItem(ConfigGroup.GPT_SOVITS_SERVICE, 'UsernameModelsEnabled', True, BoolValidator())
+    gptSovitsRouteFromDots = ConfigItem(ConfigGroup.GPT_SOVITS_SERVICE, 'RouteFromDots', False, BoolValidator())
+
     gptSovitsApiUrl = ConfigItem(
         group=ConfigGroup.GPT_SOVITS_SERVICE,
         name=ConfigKey.GPT_SOVITS_API_URL,
-        default='http://localhost:19874',
+        default='http://127.0.0.1:9880',
     )
 
     gptSovitsSovitsModel = ConfigItem(
@@ -688,3 +741,24 @@ _preload_voice_dict(DATA_DIR / 'config.json')
 
 # 加载配置文件
 qconfig.load(str(DATA_DIR / 'config.json'), cfg)
+
+
+def _migrate_fish_audio_voices(config: Config) -> None:
+    """Keep the selected voice available in the new library without a lookup."""
+    try:
+        voice_id = normalize_voice_id(config.fishAudioReferenceId.value)
+    except ValueError:
+        return
+    if config.fishAudioReferenceId.value != voice_id:
+        config.set(config.fishAudioReferenceId, voice_id)
+    voices = config.fishAudioVoices.value
+    if voice_id not in voices:
+        config.set(config.fishAudioVoices, {**voices, voice_id: f'音色 {voice_id[:8]}'})
+
+
+_migrate_fish_audio_voices(cfg)
+
+# Hidden legacy engines must not remain the active service behind the selector.
+# Preserve their settings so an older build can still read the same config.
+if cfg.activeTTS.value not in VISIBLE_TTS_SERVICES:
+    cfg.set(cfg.activeTTS, ServiceType.DOTS)

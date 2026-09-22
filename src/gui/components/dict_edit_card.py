@@ -2,7 +2,7 @@
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QHBoxLayout, QWidget
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     ConfigItem,
@@ -36,6 +36,7 @@ class DictItemWidget(QWidget):
         key_placeholder: str = '输入键',
         value_placeholder: str = '输入值',
         parent: QWidget | None = None,
+        file_value: bool = False,
     ) -> None:
         """初始化字典项组件
 
@@ -49,6 +50,7 @@ class DictItemWidget(QWidget):
             parent: 父组件
         """
         super().__init__(parent=parent)
+        self.file_value = file_value
         self._init_ui(key, value, key_label, value_label, key_placeholder, value_placeholder)
 
     def _init_ui(
@@ -101,6 +103,13 @@ class DictItemWidget(QWidget):
         self.value_edit.textChanged.connect(self._on_value_changed)
         layout.addWidget(self.value_edit)
 
+        if self.file_value:
+            self.value_edit.setFixedWidth(260)
+            self.browse_btn = ToolButton(FIF.FOLDER, self)
+            self.browse_btn.setToolTip('选择触发音频文件')
+            self.browse_btn.clicked.connect(self._browse_audio)
+            layout.addWidget(self.browse_btn)
+
         layout.addStretch()
 
         # 删除/添加按钮（初始隐藏，由父组件控制）
@@ -114,6 +123,16 @@ class DictItemWidget(QWidget):
         self.add_btn.hide()  # 默认隐藏
 
         self.setFixedHeight(60)
+
+    def _browse_audio(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            '选择触发音频',
+            '',
+            '音频文件 (*.wav *.mp3 *.flac *.ogg)',
+        )
+        if path:
+            self.value_edit.setText(path)
 
     def _on_value_changed(self) -> None:
         """值改变时发射信号"""
@@ -155,6 +174,7 @@ class DictEditCard(ExpandGroupSettingCard):
         key_placeholder: str = '输入键',
         value_placeholder: str = '输入值',
         parent: QWidget | None = None,
+        file_values: bool = False,
     ) -> None:
         """初始化字典编辑卡片
 
@@ -180,6 +200,7 @@ class DictEditCard(ExpandGroupSettingCard):
         self.value_label = value_label
         self.key_placeholder = key_placeholder
         self.value_placeholder = value_placeholder
+        self.file_values = file_values
         self.dict_items = []  # 存储字典项组件
         self._load_dict()
 
@@ -217,6 +238,7 @@ class DictEditCard(ExpandGroupSettingCard):
             self.key_placeholder,
             self.value_placeholder,
             self,
+            file_value=self.file_values,
         )
         # 连接信号
         item.deleteRequested.connect(self._on_delete_item)

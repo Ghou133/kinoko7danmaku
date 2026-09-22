@@ -23,8 +23,8 @@ class AliasDictCard(DictEditCard):
         super().__init__(
             config_item=cfg.aliasDict,
             icon=FIF.BOOK_SHELF,
-            title='别名字典',
-            content='设置弹幕中的别名替换规则',
+            title='用户名别名字典 {user_name}',
+            content='只替换用户名，所有 TTS 引擎生效；沿用原别名字典，长词优先、单次替换',
             key_label='原词',
             value_label='替换为',
             key_placeholder='输入原词',

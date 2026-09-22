@@ -1,6 +1,6 @@
 """字符串输入设置卡片"""
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QSignalBlocker
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import (
@@ -71,13 +71,17 @@ class StrSettingCard(SettingCard):
         self.hBoxLayout.addSpacing(16)
 
         # 连接信号
-        configItem.valueChanged.connect(self.setValue)
+        configItem.valueChanged.connect(self._sync_from_config)
         self.lineEdit.textChanged.connect(self._on_text_changed)
 
     def _on_text_changed(self, text: str) -> None:
         """输入框文本改变时的回调"""
         self.setValue(text)
-        self.valueChanged.emit(text)
+        self.valueChanged.emit(self.configItem.value)
+
+    def _sync_from_config(self, value: str) -> None:
+        with QSignalBlocker(self.lineEdit):
+            self.lineEdit.setText(value)
 
     def setValue(self, value: str) -> None:
         """设置值
@@ -86,4 +90,4 @@ class StrSettingCard(SettingCard):
             value: 新值
         """
         qconfig.set(self.configItem, value)
-        self.lineEdit.setText(value)
+        self._sync_from_config(self.configItem.value)

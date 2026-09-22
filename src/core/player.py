@@ -1,4 +1,8 @@
 import asyncio
+import time
+
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 
 import miniaudio
 import pyaudio
@@ -9,11 +13,28 @@ from loguru import logger
 from models.device import OutputDevice
 
 
+@dataclass
+class PlaybackJob:
+    play: Callable[[], Awaitable[None]]
+    done: asyncio.Future
+    enqueued_at: float = field(default_factory=time.perf_counter)
+
+
+async def audio_thread(func, *args, **kwargs):
+    """Join an in-flight device call before closing its stream on cancellation."""
+    task = asyncio.create_task(asyncio.to_thread(func, *args, **kwargs))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        await task
+        raise
+
+
 class StreamPlayer:
     def __init__(self) -> None:
         self.p = pyaudio.PyAudio()
         self.device_index = sd.default.device[1]
-        self.audio_queue: asyncio.Queue[bytes] | None = None
+        self.audio_queue: asyncio.Queue[bytes | PlaybackJob] | None = None
         self.worker_task: asyncio.Task | None = None
         self.is_running = False
 
@@ -117,18 +138,72 @@ class StreamPlayer:
             logger.error('音频队列未初始化')
             return
 
+        queue = self.audio_queue
         while self.is_running:
+            item = None
             try:
                 # 从队列中获取音频数据
-                audio_bytes = await self.audio_queue.get()
+                item = await queue.get()
                 # 在线程中播放音频（避免阻塞）
-                await asyncio.to_thread(self.play_bytes, audio_bytes)
-                self.audio_queue.task_done()
+                if isinstance(item, PlaybackJob):
+                    if not item.done.cancelled():
+                        logger.info('弹幕播放任务开始：排队 {:.2f}s，剩余 {} 条',
+                                    time.perf_counter() - item.enqueued_at, queue.qsize())
+                        await item.play()
+                        if not item.done.done():
+                            item.done.set_result(None)
+                else:
+                    await audio_thread(self.play_bytes, item)
             except asyncio.CancelledError:
+                if isinstance(item, PlaybackJob) and not item.done.done():
+                    item.done.cancel()
                 logger.info('音频播放队列任务已取消')
                 break
             except Exception as e:
+                if isinstance(item, PlaybackJob) and not item.done.done():
+                    item.done.set_exception(e)
                 logger.exception(f'播放音频时出错: {e}')
+            finally:
+                if item is not None:
+                    queue.task_done()
+
+    async def play_pcm_stream(self, chunks) -> None:
+        """Consume PCM incrementally, keeping a single output stream open."""
+        stream = None
+        audio_format = None
+        try:
+            async for chunk in chunks:
+                current_format = (chunk.sample_rate, chunk.channels)
+                if stream is None:
+                    audio_format = current_format
+                    # Opening is brief and synchronous: cancellation cannot orphan a new stream.
+                    stream = self.p.open(
+                        format=pyaudio.paInt16,
+                        channels=chunk.channels,
+                        rate=chunk.sample_rate,
+                        output=True,
+                        output_device_index=self.device_index,
+                    )
+                elif current_format != audio_format:
+                    raise ValueError('音频流中途改变了采样格式')
+                # Bound device writes so stop remains responsive even for a large HTTP packet.
+                block = chunk.channels * 2 * 2048
+                for offset in range(0, len(chunk.data), block):
+                    await audio_thread(stream.write, chunk.data[offset : offset + block])
+        finally:
+            await chunks.aclose()
+            if stream is not None:
+                try:
+                    await audio_thread(stream.stop_stream)
+                finally:
+                    stream.close()
+
+    async def play_job_async(self, play: Callable[[], Awaitable[None]]) -> None:
+        if self.audio_queue is None:
+            raise RuntimeError('音频队列未初始化，请先启动播放器')
+        done = asyncio.get_running_loop().create_future()
+        await self.audio_queue.put(PlaybackJob(play, done))
+        await done
 
     def start_worker(self) -> None:
         """启动音频播放队列处理任务"""
@@ -153,7 +228,9 @@ class StreamPlayer:
             if self.audio_queue is not None:
                 while not self.audio_queue.empty():
                     try:
-                        self.audio_queue.get_nowait()
+                        pending = self.audio_queue.get_nowait()
+                        if isinstance(pending, PlaybackJob) and not pending.done.done():
+                            pending.done.cancel()
                         self.audio_queue.task_done()
                     except asyncio.QueueEmpty:
                         break

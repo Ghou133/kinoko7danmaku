@@ -11,9 +11,14 @@
 
 基于 PySide6 的 B 站直播弹幕姬，实时将弹幕、礼物、SC、舰长等消息转为语音播报。
 
+## 本地增强版
+
+新增 dots.tts 原生 HTTP/流式播放、用户名与消息独立字典、关键词音频混播。
+请先阅读 [新增功能说明](新增功能说明.md)。Windows 可双击 `start.bat` 启动。
+
 ## 特性
 
-- **多 TTS 引擎** — 支持 MiniMax、Fish Speech、GPT-SoVITS、Piper、Edge 五种语音服务
+- **多 TTS 引擎** — 支持 dots.tts、MiniMax、Fish Speech、GPT-SoVITS、Piper、Edge 六种语音服务
 - **实时监控** — 弹幕 / 礼物 / SC / 舰长 / 醒目留言实时捕获与播报
 - **礼物合并** — 短时间内的连续礼物自动合并播报，避免刷屏
 - **别名字典** — 支持特殊词汇的自定义发音替换
@@ -57,6 +62,7 @@ uv run src/main.py
 
 | 服务 | 说明 | 需要 API Key |
 |------|------|:---:|
+| dots.tts | 本机 HTTP 服务，支持流式播放及关键词音频插播 | 自部署 |
 | MiniMax | 高品质云端语音合成 | ✅ |
 | Fish Speech | 开源语音合成 | 自部署 |
 | GPT-SoVITS | 少样本语音克隆 | 自部署 |

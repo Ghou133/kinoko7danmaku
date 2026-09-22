@@ -10,10 +10,9 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from qasync import asyncSlot
 
-from core.player import audio_player
+from core.speech import speak_template
 from core.qconfig import cfg
 from models.bilibili import GiftMessage
-from tts_service import get_tts_service
 
 
 class UserGiftGroup(BaseModel):
@@ -46,6 +45,7 @@ class GiftMerger(QObject):
     """
 
     merged_gift_received = Signal(str)
+    tts_notice = Signal(str)
 
     def __init__(self) -> None:
         """初始化礼物合并管理器
@@ -195,9 +195,18 @@ class GiftMerger(QObject):
         self.merged_gift_received.emit(display_text)
 
         # 发送 TTS
-        tts_service = get_tts_service()
-        audio = await tts_service.text_to_speech(display_text)
-        await audio_player.play_bytes_async(audio)
+        try:
+            notice = await speak_template(
+                cfg.giftOnText.value,
+                user_name=gift_message.user_name,
+                gift_name=gift_message.gift_name,
+                gift_num=gift_message.gift_num,
+            )
+        except Exception as exc:
+            self.tts_notice.emit(f'TTS 播报失败：{exc}')
+            raise
+        if notice:
+            self.tts_notice.emit(notice)
 
     async def clear_all(self) -> None:
         """清空所有礼物组

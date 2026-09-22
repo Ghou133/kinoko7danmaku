@@ -9,6 +9,7 @@
 """
 
 import os
+import sys
 import tomllib
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
@@ -17,6 +18,16 @@ block_cipher = None
 
 # 项目根目录
 root_dir = Path.cwd()
+
+# Do not let unrelated applications on PATH supply DLLs to dependency scanning.
+# In particular, Qt uses Windows ICU's unversioned exports; a Poppler ICU DLL
+# with the same filename exports suffixed symbols and breaks frozen QtCore.
+if os.name == 'nt':
+    system_root = Path(os.environ.get('SystemRoot', r'C:\Windows'))
+    os.environ['PATH'] = os.pathsep.join([
+        str(Path(sys.executable).parent), sys.base_prefix,
+        str(system_root / 'System32'), str(system_root),
+    ])
 
 # 从 pyproject.toml 读取版本号并生成 version.txt
 print("Generating version.txt...")
@@ -89,6 +100,16 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+# Qt 6 targets Windows 10+. Use the OS Universal CRT, rather than old copies
+# accidentally discovered on PATH (for example from image/PDF tool runtimes).
+# Bundling those copies can make QtCore fail with "procedure not found".
+if os.name == 'nt':
+    a.binaries = [
+        entry for entry in a.binaries
+        if Path(entry[0]).name.lower() != 'ucrtbase.dll'
+        and not Path(entry[0]).name.lower().startswith('api-ms-win-crt-')
+    ]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

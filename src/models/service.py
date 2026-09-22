@@ -9,10 +9,12 @@ class ServiceType(StrEnum):
     """TTS 服务类型枚举"""
 
     FISH_SPEECH = 'fish_speech'
+    FISH_AUDIO = 'fish_audio'
     GPT_SOVITS = 'gpt_sovits'
     MINIMAX = 'minimax'
     PIPER = 'piper'
     EDGE = 'edge'
+    DOTS = 'dots_tts'
 
 
 class ServiceDetail(BaseModel):

@@ -1,6 +1,6 @@
 """整数输入设置卡片"""
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QSignalBlocker
 from PySide6.QtGui import QIcon, QIntValidator
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import ConfigItem, FluentIconBase, LineEdit, SettingCard, qconfig
@@ -56,7 +56,7 @@ class IntSettingCard(SettingCard):
         self.hBoxLayout.addSpacing(16)
 
         # 连接信号
-        configItem.valueChanged.connect(self.setValue)
+        configItem.valueChanged.connect(self._sync_from_config)
         self.lineEdit.textChanged.connect(self._on_text_changed)
 
     def _on_text_changed(self, text: str) -> None:
@@ -64,7 +64,11 @@ class IntSettingCard(SettingCard):
         if text and text.isdigit():
             value = int(text)
             self.setValue(value)
-            self.valueChanged.emit(value)
+            self.valueChanged.emit(self.configItem.value)
+
+    def _sync_from_config(self, value: int) -> None:
+        with QSignalBlocker(self.lineEdit):
+            self.lineEdit.setText(str(value))
 
     def setValue(self, value: int) -> None:
         """设置值
@@ -73,4 +77,4 @@ class IntSettingCard(SettingCard):
             value: 新值
         """
         qconfig.set(self.configItem, value)
-        self.lineEdit.setText(str(value))
+        self._sync_from_config(self.configItem.value)

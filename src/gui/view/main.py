@@ -1,6 +1,7 @@
 """主窗口"""
 
 import asyncio
+import time
 
 from pathlib import Path
 
@@ -41,11 +42,6 @@ from gui.components import HomePanel, LoginPanel
 from gui.icons import CustomIcon
 
 from .audio_test import AudioTestInterface
-from .minimax import (
-    MinimaxHomeInterface,
-    MinimaxVoiceCloneInterface,
-    MinimaxVoiceListInterface,
-)
 from .settings import SettingsInterface
 
 
@@ -105,6 +101,21 @@ class MainInterface(QWidget):
         bili_service.gift_received.connect(message_card.add_message)
         bili_service.guard_received.connect(message_card.add_message)
         bili_service.superchat_received.connect(message_card.add_message)
+        bili_service.tts_notice.connect(self._on_tts_notice)
+
+    def _on_tts_notice(self, notice: str) -> None:
+        self.home_panel.message_display_card.add_message(f'[TTS] {notice}')
+        # Keep every notice in the message list without stacking a popup for
+        # every queued message while a local service remains unavailable.
+        now = time.monotonic()
+        if now - getattr(self, '_last_tts_notice_at', float('-inf')) < 10:
+            return
+        self._last_tts_notice_at = now
+        InfoBar.warning(
+            title='TTS 提示', content=notice, orient=Qt.Horizontal,
+            isClosable=True, position=InfoBarPosition.TOP, duration=6000,
+            parent=self.window(),
+        )
 
     def _check_login_status(self) -> None:
         """检查登录状态"""
@@ -185,48 +196,22 @@ class MainWindow(FluentWindow):
         self.audio_test_interface = AudioTestInterface(self)
         self.audio_test_interface.setObjectName('audioTestInterface')
 
-        # 创建 MiniMax 音色相关界面
-        self.minimax_interface = MinimaxHomeInterface(self)
-        self.minimax_interface.setObjectName('minimaxInterface')
-
-        self.minimax_voice_list_interface = MinimaxVoiceListInterface(self)
-        self.minimax_voice_list_interface.setObjectName('minimaxVoiceListInterface')
-
-        self.minimax_voice_clone_interface = MinimaxVoiceCloneInterface(self)
-        self.minimax_voice_clone_interface.setObjectName('minimaxVoiceCloneInterface')
-
         # 创建设置界面
         self.settings_interface = SettingsInterface(self)
         self.settings_interface.setObjectName('settingsInterface')
+        self.tts_settings_interface = self.settings_interface.tts_interface
+        self.tts_settings_interface.setObjectName('ttsSettingsInterface')
+        self.user_dictionary_interface = self.settings_interface.user_dictionary_interface
+        self.user_dictionary_interface.setObjectName('userDictionaryInterface')
 
         # 添加主界面到导航栏
         self.addSubInterface(self.main_interface, FIF.HOME, '主页', NavigationItemPosition.TOP)
 
+        self.addSubInterface(self.tts_settings_interface, FIF.MICROPHONE, 'TTS 设置', NavigationItemPosition.TOP)
+        self.addSubInterface(self.user_dictionary_interface, FIF.BOOK_SHELF, '用户字典', NavigationItemPosition.TOP)
+
         # 添加音频测试界面到导航栏
         self.addSubInterface(self.audio_test_interface, FIF.MUSIC, '音频测试', NavigationItemPosition.TOP)
-
-        # 添加 MiniMax 父菜单和子菜单
-        self.addSubInterface(
-            self.minimax_interface,
-            CustomIcon.MINIMAX,
-            'MiniMax',
-            NavigationItemPosition.TOP,
-        )
-        self.addSubInterface(
-            self.minimax_voice_list_interface,
-            FIF.LIBRARY,
-            '音色列表',
-            parent=self.minimax_interface,
-        )
-        self.addSubInterface(
-            self.minimax_voice_clone_interface,
-            FIF.MICROPHONE,
-            '音色克隆',
-            parent=self.minimax_interface,
-        )
-
-        # 启用 MiniMax 菜单的展开状态记忆
-        self.navigationInterface.widget('minimaxInterface').setRememberExpandState(True)
 
         self.navigationInterface.addItem(
             routeKey='update',

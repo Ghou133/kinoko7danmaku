@@ -125,10 +125,6 @@ class MinimaxService(TTSService):
         if not api_key:
             raise ValueError('API Key is required')
         api_key = api_key.strip()  # 防呆设计，真的有人会加上空格或者回车
-        alias_texts = []
-        if cfg.aliasDict.value:
-            for k, v in cfg.aliasDict.value.items():
-                alias_texts.append(f'{k}/{v}')
 
         request = MinimaxTTSRequest(
             model=model,
@@ -139,7 +135,6 @@ class MinimaxService(TTSService):
                 vol=vol,
                 pitch=pitch,
             ),
-            pronunciation_dict={'tone': alias_texts},
             audio_setting=AudioSetting(
                 format='wav',  # 使用 WAV 格式，避免需要 ffmpeg 解码
                 sample_rate=32000,

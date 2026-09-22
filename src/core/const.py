@@ -1,5 +1,6 @@
 """全局常量定义"""
 
+import os
 import shutil
 import sys
 
@@ -35,6 +36,11 @@ def get_data_dir() -> Path:
     Returns:
         数据目录路径
     """
+    override = os.environ.get('KINOKO_DATA_DIR')
+    if override:
+        target = Path(override).resolve()
+        target.mkdir(parents=True, exist_ok=True)
+        return target
     user_data_dir = Path.home() / '.kinoko7danmaku'
     legacy_data_dir = Path('data')
 
@@ -58,12 +64,22 @@ DATA_DIR = get_data_dir()
 
 # 支持的 TTS 服务配置
 SUPPORTED_SERVICES = {
+    ServiceType.DOTS: ServiceDetail(name=ServiceType.DOTS, description='dots.tts'),
+    ServiceType.FISH_AUDIO: ServiceDetail(name=ServiceType.FISH_AUDIO, description='Fish Audio'),
     ServiceType.MINIMAX: ServiceDetail(name=ServiceType.MINIMAX, description='MiniMax'),
     ServiceType.GPT_SOVITS: ServiceDetail(name=ServiceType.GPT_SOVITS, description='GPT-SoVITS'),
     ServiceType.FISH_SPEECH: ServiceDetail(name=ServiceType.FISH_SPEECH, description='Fish Speech'),
     ServiceType.PIPER: ServiceDetail(name=ServiceType.PIPER, description='Piper'),
     ServiceType.EDGE: ServiceDetail(name=ServiceType.EDGE, description='Edge'),
 }
+
+# Keep legacy adapters/configuration readable while limiting the UI choices.
+VISIBLE_TTS_SERVICES = {
+    service: SUPPORTED_SERVICES[service]
+    for service in (ServiceType.DOTS, ServiceType.GPT_SOVITS, ServiceType.FISH_AUDIO)
+}
+
+FISH_AUDIO_MODELS = ['s2.1-pro', 's2.1-pro-free', 's2-pro', 's1']
 
 # MiniMax 支持的模型列表
 MINIMAX_MODELS = [

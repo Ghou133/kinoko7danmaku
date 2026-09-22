@@ -48,11 +48,7 @@ class FishSpeechService(TTSService):
         Raises:
             httpx.HTTPStatusError: HTTP请求失败
         """
-        # 应用别名替换
         format_text = text
-        if cfg.aliasDict.value:
-            for k, v in cfg.aliasDict.value.items():
-                format_text = format_text.replace(k, v)
 
         # 准备请求数据
         data = {

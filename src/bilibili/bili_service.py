@@ -6,7 +6,7 @@ from bilibili_api import Credential, live, user
 from loguru import logger
 
 from core.const import COOKIES_PATH
-from core.player import audio_player
+from core.speech import speak_template
 from core.qconfig import cfg
 from models.bilibili import (
     DanmuMessage,
@@ -15,7 +15,6 @@ from models.bilibili import (
     GuardBuy,
     SuperChatMessage,
 )
-from tts_service import get_tts_service
 
 from .gift_merger import gift_merger
 
@@ -31,6 +30,7 @@ class BiliService(QObject):
     gift_received = Signal(str)  # 礼物消息信号
     guard_received = Signal(str)  # 舰长消息信号
     superchat_received = Signal(str)  # SC 消息信号
+    tts_notice = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -41,6 +41,16 @@ class BiliService(QObject):
 
         # 连接礼物合并管理器的信号
         gift_merger.merged_gift_received.connect(self.gift_received.emit)
+        gift_merger.tts_notice.connect(self.tts_notice.emit)
+
+    async def _speak(self, template: str, **fields: object) -> None:
+        try:
+            notice = await speak_template(template, **fields)
+        except Exception as exc:
+            self.tts_notice.emit(f'TTS 播报失败：{exc}')
+            raise
+        if notice:
+            self.tts_notice.emit(notice)
 
     def _check_room_status(self) -> None:
         """检查直播间状态，如果关闭则重新连接"""
@@ -71,9 +81,9 @@ class BiliService(QObject):
             )
             self.danmaku_received.emit(display_text)
 
-            tts_service = get_tts_service()
-            audio = await tts_service.text_to_speech(display_text)
-            await audio_player.play_bytes_async(audio)
+            await self._speak(
+                cfg.danmakuOnText.value, user_name=danmu_message.user_name, message=danmu_message.message
+            )
 
         @self.room_obj.on(EventType.SEND_GIFT)
         async def on_send_gift(event: dict[str, object]) -> None:
@@ -101,9 +111,11 @@ class BiliService(QObject):
             )
             self.guard_received.emit(display_text)
 
-            tts_service = get_tts_service()
-            audio = await tts_service.text_to_speech(display_text)
-            await audio_player.play_bytes_async(audio)
+            await self._speak(
+                cfg.guardOnText.value,
+                user_name=guard_buy_message.user_name,
+                guard_name=guard_buy_message.guard_level.name_cn,
+            )
 
         @self.room_obj.on(EventType.SUPER_CHAT_MESSAGE)
         async def on_super_chat_message(event: dict[str, object]) -> None:
@@ -121,9 +133,11 @@ class BiliService(QObject):
             )
             self.superchat_received.emit(display_text)
 
-            tts_service = get_tts_service()
-            audio = await tts_service.text_to_speech(display_text)
-            await audio_player.play_bytes_async(audio)
+            await self._speak(
+                cfg.superChatOnText.value,
+                user_name=super_chat_message.user_name,
+                message=super_chat_message.message,
+            )
 
     def load_credential(self) -> None:
         with open(COOKIES_PATH, encoding='utf-8') as f:

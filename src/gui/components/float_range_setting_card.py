@@ -1,6 +1,6 @@
 """浮点数范围设置卡片"""
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, QSignalBlocker
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import RangeSettingCard, qconfig
@@ -47,6 +47,14 @@ class FloatRangeSettingCard(RangeSettingCard):
         # 调用父类初始化（会设置 slider）
         super().__init__(configItem, icon, title, content, parent)
 
+        # Config values are real units; only slider signals use scaled integers.
+        # Keeping these paths separate also makes several cards bound to one
+        # config item safe when a value such as speed=1 arrives as an integer.
+        configItem.valueChanged.disconnect(self.setValue)
+        configItem.valueChanged.connect(self._sync_from_config)
+        self.slider.valueChanged.disconnect(self._RangeSettingCard__onValueChanged)
+        self.slider.valueChanged.connect(self._on_slider_changed)
+
         # 重新配置 slider 以支持浮点数
         self._reconfigure_slider()
 
@@ -55,14 +63,14 @@ class FloatRangeSettingCard(RangeSettingCard):
         min_val, max_val = self.configItem.range
 
         # 阻止信号触发，避免在设置范围时触发 valueChanged
-        self.slider.blockSignals(blocked=True)
+        self.slider.blockSignals(True)
         # 将浮点数范围转换为整数范围
         self.slider.setRange(int(min_val * self._internal_step), int(max_val * self._internal_step))
         self.slider.setSingleStep(1)  # 内部步长始终为 1
         self.slider.setValue(int(self.configItem.value * self._internal_step))
 
         # 恢复信号
-        self.slider.blockSignals(blocked=False)
+        self.slider.blockSignals(False)
         # 更新显示标签
         self._update_label(self.configItem.value)
 
@@ -81,23 +89,14 @@ class FloatRangeSettingCard(RangeSettingCard):
         Args:
             value: 浮点数值
         """
-        # 如果传入的是整数（来自父类的信号），需要转换为浮点数
-        if isinstance(value, int):
-            # 这是从 slider 的 valueChanged 信号传来的内部整数值
-            float_value = value / self._internal_step
-            float_value = round(float_value, self.decimals)
-        else:
-            # 这是直接调用 setValue 传入的浮点数值
-            float_value = value
+        qconfig.set(self.configItem, value)
+        self._sync_from_config(self.configItem.value)
 
-        # 更新配置
-        qconfig.set(self.configItem, float_value)
+    def _sync_from_config(self, value: float) -> None:
+        self._update_label(value)
+        with QSignalBlocker(self.slider):
+            self.slider.setValue(round(value * self._internal_step))
 
-        # 更新显示
-        self._update_label(float_value)
-
-        # 更新滑块（使用 blockSignals 避免触发信号循环）
-        self.slider.blockSignals(blocked=True)
-        internal_value = int(float_value * self._internal_step)
-        self.slider.setValue(internal_value)
-        self.slider.blockSignals(blocked=False)
+    def _on_slider_changed(self, value: int) -> None:
+        self.setValue(round(value / self._internal_step, self.decimals))
+        self.valueChanged.emit(float(self.configItem.value))
