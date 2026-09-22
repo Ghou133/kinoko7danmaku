@@ -1,0 +1,24 @@
+# 统一行尾：上游仓库以 LF 存储，强制工作区也用 LF
+# 避免 Windows 下 autocrlf 造成的「整文件 diff」噪音
+* text=auto eol=lf
+
+# Windows 批处理必须 CRLF，否则 cmd.exe 解析 label/goto 可能出错
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制文件不做行尾转换
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg text eol=lf
+*.exe binary
+*.dll binary
+*.pyd binary
+*.so binary
+*.wav binary
+*.mp3 binary
+*.flac binary
+*.ogg binary
