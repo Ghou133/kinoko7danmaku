@@ -125,6 +125,22 @@ async def _gpt_status(client: httpx.AsyncClient, base_url: str) -> ServiceAvaila
     return ServiceAvailability(False, '该地址不是兼容的 GPT-SoVITS 服务')
 
 
+async def _dobao_status(client: httpx.AsyncClient, base_url: str) -> ServiceAvailability:
+    response = await client.get(base_url + '/health')
+    response.raise_for_status()
+    status = _json(response)
+    if status.get('service') != 'dobao-local-api' or status.get('status') != 'running':
+        return ServiceAvailability(False, '该地址不是兼容的 Doubao API')
+    if status.get('upstream_paused'):
+        return ServiceAvailability(False, 'Doubao 上游请求已暂停，请在 API 首页检查状态并手动恢复')
+    if status.get('credential_configured') is not True:
+        return ServiceAvailability(False, 'Doubao API 在线但尚未登录，请在 API 首页配置登录信息')
+    detail = 'Doubao API 在线，登录信息已配置'
+    if status.get('upstream_verified') is not True:
+        detail += '；首次合成时确认音色是否可用'
+    return ServiceAvailability(True, detail)
+
+
 async def _probe(service_type: str, base_url: str) -> ServiceAvailability:
     try:
         # One deadline covers every fallback request and connection setup.
@@ -134,6 +150,8 @@ async def _probe(service_type: str, base_url: str) -> ServiceAvailability:
             ) as client:
                 if service_type == 'dots_tts':
                     return await _dots_status(client, base_url)
+                if service_type == 'dobao_tts':
+                    return await _dobao_status(client, base_url)
                 return await _gpt_status(client, base_url)
     except (TimeoutError, httpx.TimeoutException):
         return ServiceAvailability(False, '本地 TTS 服务检查超时，请确认服务已启动')
@@ -175,9 +193,9 @@ async def check_service_availability(
     service/address share one bounded probe, including concurrent UI refreshes.
     """
     service_type = str(service_type)
-    if service_type == 'fish_audio':
+    if service_type in ('fish_audio', 'seed_tts'):
         return ServiceAvailability(True, '云端 API，直接使用已保存的配置')
-    if service_type not in ('dots_tts', 'gpt_sovits'):
+    if service_type not in ('dots_tts', 'gpt_sovits', 'dobao_tts'):
         return ServiceAvailability(False, '该 TTS 服务不支持用户角色映射')
     try:
         base_url = _base_url(api_url)

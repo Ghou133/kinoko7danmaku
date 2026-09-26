@@ -6,6 +6,8 @@ from .edge import EdgeService
 from .dots import DotsTTSService
 from .fish_speech import FishSpeechService
 from .fish_audio import FishAudioService
+from .seed_tts import SeedTTSService
+from .dobao import DoBaoTTSService
 from .gpt_sovits import GPTSovitsService
 from .minimax import MinimaxService
 from .piper import PiperService
@@ -17,6 +19,8 @@ def get_tts_service() -> TTSService:
         ServiceType.DOTS: DotsTTSService,
         ServiceType.FISH_SPEECH: FishSpeechService,
         ServiceType.FISH_AUDIO: FishAudioService,
+        ServiceType.SEED_TTS: SeedTTSService,
+        ServiceType.DOBAO: DoBaoTTSService,
         ServiceType.GPT_SOVITS: GPTSovitsService,
         ServiceType.MINIMAX: MinimaxService,
         ServiceType.PIPER: PiperService,
@@ -30,6 +34,8 @@ __all__ = [
     'EdgeService',
     'FishSpeechService',
     'FishAudioService',
+    'SeedTTSService',
+    'DoBaoTTSService',
     'GPTSovitsService',
     'MinimaxService',
     'PiperService',

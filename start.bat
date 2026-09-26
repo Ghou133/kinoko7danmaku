@@ -1,5 +1,9 @@
 @echo off
 cd /d "%~dp0"
+if exist "dist-doubao\Kinoko7Danmaku.exe" (
+    start "" "dist-doubao\Kinoko7Danmaku.exe"
+    exit /b
+)
 if exist "dist-dots-recovery\Kinoko7Danmaku.exe" (
     start "" "dist-dots-recovery\Kinoko7Danmaku.exe"
     exit /b

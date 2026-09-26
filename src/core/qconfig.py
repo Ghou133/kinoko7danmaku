@@ -35,6 +35,7 @@ from .const import (
 )
 from .player import audio_player
 from .fish_voices import normalize_voice_id
+from .dobao_voices import DEFAULT_DOBAO_VOICE, detect_dobao_folder
 
 
 class ConfigGroup(StrEnum):
@@ -45,6 +46,8 @@ class ConfigGroup(StrEnum):
     MINIMAX_SERVICE = 'MinimaxService'
     FISH_SPEECH_SERVICE = 'FishSpeechService'
     FISH_AUDIO_SERVICE = 'FishAudioService'
+    SEED_TTS_SERVICE = 'SeedTTSService'
+    DOBAO_SERVICE = 'DoBaoTTSService'
     GPT_SOVITS_SERVICE = 'GptSovitsService'
     PIPER_SERVICE = 'PiperService'
     EDGE_SERVICE = 'EdgeService'
@@ -491,6 +494,21 @@ class Config(QConfig):
     )
     fishAudioTimeout = RangeConfigItem(ConfigGroup.FISH_AUDIO_SERVICE, 'Timeout', 180, RangeValidator(5, 600))
 
+    # Volcengine Doubao Voice Seed-TTS 2.0 V3 API.
+    seedTtsApiKey = ConfigItem(ConfigGroup.SEED_TTS_SERVICE, 'ApiKey', '')
+    seedTtsVoice = ConfigItem(ConfigGroup.SEED_TTS_SERVICE, 'Voice', '')
+    seedTtsSpeed = RangeConfigItem(ConfigGroup.SEED_TTS_SERVICE, 'Speed', 0, RangeValidator(-50, 100))
+    seedTtsStreaming = ConfigItem(ConfigGroup.SEED_TTS_SERVICE, 'Streaming', True, BoolValidator())
+    seedTtsTimeout = RangeConfigItem(ConfigGroup.SEED_TTS_SERVICE, 'Timeout', 180, RangeValidator(5, 600))
+
+    # Cookie credentials belong to the local DoBao API, never this client.
+    dobaoFolder = ConfigItem(ConfigGroup.DOBAO_SERVICE, 'InstallFolder', detect_dobao_folder())
+    dobaoApiUrl = ConfigItem(ConfigGroup.DOBAO_SERVICE, 'ApiUrl', 'http://127.0.0.1:9882')
+    # An API upgrade may introduce IDs newer than the bundled catalog.
+    dobaoVoice = ConfigItem(ConfigGroup.DOBAO_SERVICE, 'Voice', DEFAULT_DOBAO_VOICE)
+    dobaoSpeed = RangeConfigItem(ConfigGroup.DOBAO_SERVICE, 'Speed', 1.0, RangeValidator(0.5, 2.0))
+    dobaoTimeout = RangeConfigItem(ConfigGroup.DOBAO_SERVICE, 'Timeout', 130, RangeValidator(5, 600))
+
     # GPT-SoVITS TTS 服务配置
     gptSovitsFolder = ConfigItem(ConfigGroup.GPT_SOVITS_SERVICE, 'InstallFolder', '')
     gptSovitsStreaming = ConfigItem(ConfigGroup.GPT_SOVITS_SERVICE, 'Streaming', True, BoolValidator())
@@ -758,7 +776,8 @@ def _migrate_fish_audio_voices(config: Config) -> None:
 
 _migrate_fish_audio_voices(cfg)
 
-# Hidden legacy engines must not remain the active service behind the selector.
-# Preserve their settings so an older build can still read the same config.
-if cfg.activeTTS.value not in VISIBLE_TTS_SERVICES:
+# Keep an existing Seed-TTS selection intact; the selector explicitly displays
+# its hidden state until the user chooses a replacement. Older engine migration
+# remains unchanged, and every engine's settings stay readable by older builds.
+if cfg.activeTTS.value not in VISIBLE_TTS_SERVICES and cfg.activeTTS.value != ServiceType.SEED_TTS:
     cfg.set(cfg.activeTTS, ServiceType.DOTS)

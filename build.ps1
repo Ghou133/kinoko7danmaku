@@ -32,10 +32,10 @@ Write-Host ""
 Write-Host "[3/3] 打包完成！" -ForegroundColor Green
 Write-Host ""
 Write-Host "可执行文件位置：" -ForegroundColor Cyan
-Write-Host "  dist/弹幕姬.exe" -ForegroundColor White
+Write-Host "  dist/Kinoko7Danmaku.exe" -ForegroundColor White
 Write-Host ""
 Write-Host "使用方法：" -ForegroundColor Cyan
-Write-Host "  直接双击 弹幕姬.exe 运行" -ForegroundColor White
+Write-Host "  直接双击 Kinoko7Danmaku.exe 运行" -ForegroundColor White
 Write-Host ""
 Write-Host "注意：" -ForegroundColor Yellow
 Write-Host "  - 单文件模式首次启动较慢（需要解压）" -ForegroundColor White

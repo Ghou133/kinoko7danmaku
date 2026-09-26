@@ -13,10 +13,12 @@ from qfluentwidgets import FluentIcon as FIF
 
 from core.qconfig import cfg
 from core.fish_voices import normalize_voice_id
+from core.dobao_voices import normalize_dobao_voice, dobao_voice_name
 from core.sovits_models import scan_models
 from core.tts_availability import check_service_availability
 from core.user_voices import model_reference
 from models.service import ServiceType
+from gui.components.dobao_voice_card import populate_dobao_voice_combo
 from shiboken6 import isValid
 
 
@@ -24,6 +26,7 @@ _SERVICES = {
     ServiceType.GPT_SOVITS: 'GPT-SoVITS',
     ServiceType.DOTS: 'dots',
     ServiceType.FISH_AUDIO: 'Fish Audio',
+    ServiceType.DOBAO: 'Doubao',
 }
 
 
@@ -51,6 +54,7 @@ class UserModelsWidget(QWidget):
         self.username = LineEdit(self)
         self.username.setPlaceholderText('原始用户名（区分大小写）')
         self.service = ComboBox(self)
+        self.service.setPlaceholderText('请选择新的 TTS 服务')
         self.service.setMinimumWidth(160)
         for kind, name in _SERVICES.items():
             self.service.addItem(name, userData=kind.value)
@@ -66,11 +70,17 @@ class UserModelsWidget(QWidget):
         self.fishVoices.setMaxVisibleItems(10)
         self.fishVoices.setMinimumWidth(120)
         self.fishVoices.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.dobaoVoices = ComboBox(self)
+        self.dobaoVoices.setPlaceholderText('请选择 Doubao 音色')
+        self.dobaoVoices.setMaxVisibleItems(12)
+        self.dobaoVoices.setMinimumWidth(120)
+        self.dobaoVoices.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        populate_dobao_voice_combo(self.dobaoVoices, cfg.dobaoVoice.value)
         self.dotsModel = BodyLabel('使用 dots 当前已加载的固定模型，无需另外选择。', self)
         self.dotsModel.setWordWrap(True)
         self.bind = PushButton('保存 / 更新', self)
         self.refresh = PushButton('刷新列表', self)
-        for widget in (self.models, self.fishVoices, self.dotsModel):
+        for widget in (self.models, self.fishVoices, self.dobaoVoices, self.dotsModel):
             voice_row.addWidget(widget, 1)
         for widget in (self.bind, self.refresh):
             voice_row.addWidget(widget)
@@ -81,7 +91,7 @@ class UserModelsWidget(QWidget):
         layout.addWidget(self.form)
         availability_row = QHBoxLayout()
         self.checkButton = PushButton('检测本地服务', self)
-        self.availability = BodyLabel('本地服务尚未检测；Fish Audio 直接使用已配置 API，无需本地启动。', self)
+        self.availability = BodyLabel('尚未检测本地服务；Doubao 需要本地 API 在线并登录。', self)
         self.availability.setWordWrap(True)
         availability_row.addWidget(self.checkButton)
         availability_row.addWidget(self.availability, 1)
@@ -109,7 +119,7 @@ class UserModelsWidget(QWidget):
         self.service_changed()
 
     def engine_changed(self, *_):
-        default = _SERVICES.get(cfg.activeTTS.value, str(cfg.activeTTS.value))
+        default = _SERVICES.get(cfg.activeTTS.value, '已隐藏的服务')
         hint = f'当前默认服务：{default}。按原始用户名精确匹配，未绑定或独立开关关闭的用户使用默认服务和音色。'
         if not cfg.gptSovitsUserModelsEnabled.value:
             hint = f'总开关已关闭，所有用户使用默认服务 {default} 和音色；可继续编辑，已保存的绑定和独立开关会保留。'
@@ -117,13 +127,16 @@ class UserModelsWidget(QWidget):
 
     def service_changed(self, *_):
         kind = self.service.currentData()
+        self.status.clear()
         self.models.setVisible(kind == ServiceType.GPT_SOVITS)
         self.fishVoices.setVisible(kind == ServiceType.FISH_AUDIO)
+        self.dobaoVoices.setVisible(kind == ServiceType.DOBAO)
         self.dotsModel.setVisible(kind == ServiceType.DOTS)
-        self.refresh.setVisible(kind != ServiceType.DOTS)
+        self.refresh.setVisible(kind in (ServiceType.GPT_SOVITS, ServiceType.FISH_AUDIO))
         hints = {
             ServiceType.GPT_SOVITS: '先在 TTS 设置中保存该模型的参考音频与文本；服务未启动也可提前保存绑定。',
             ServiceType.FISH_AUDIO: '从已保存的音色中选择；可在 TTS 设置或音频测试中添加音色。',
+            ServiceType.DOBAO: '为此用户名保存任意 Doubao 音色；在 TTS 设置中启动 / 检查 API 并登录，语速沿用全局设置。',
             ServiceType.DOTS: '使用 TTS 设置中的 dots 参数；此绑定不会切换 dots 模型。',
         }
         self.selectionHint.setText(hints.get(kind, '请选择 TTS 服务。'))
@@ -171,9 +184,10 @@ class UserModelsWidget(QWidget):
         endpoints = (
             (ServiceType.DOTS, cfg.dotsApiUrl.value),
             (ServiceType.GPT_SOVITS, cfg.gptSovitsApiUrl.value),
+            (ServiceType.DOBAO, cfg.dobaoApiUrl.value),
         )
         self.checkButton.setEnabled(False)
-        self.availability.setText('正在检测 dots 和 GPT-SoVITS… Fish Audio 无需本地启动。')
+        self.availability.setText('正在检测 dots、GPT-SoVITS 和 Doubao…')
         try:
             results = await asyncio.gather(*(
                 check_service_availability(kind, url, force=True) for kind, url in endpoints
@@ -181,7 +195,11 @@ class UserModelsWidget(QWidget):
             if not isValid(self) or generation != self._probe_generation:
                 return
             summaries = []
-            current_urls = {ServiceType.DOTS: cfg.dotsApiUrl.value, ServiceType.GPT_SOVITS: cfg.gptSovitsApiUrl.value}
+            current_urls = {
+                ServiceType.DOTS: cfg.dotsApiUrl.value,
+                ServiceType.GPT_SOVITS: cfg.gptSovitsApiUrl.value,
+                ServiceType.DOBAO: cfg.dobaoApiUrl.value,
+            }
             for (kind, url), result in zip(endpoints, results):
                 if url != current_urls[kind]:
                     summaries.append(f'{_SERVICES[kind]}：地址已修改，请重新检测')
@@ -231,6 +249,13 @@ class UserModelsWidget(QWidget):
                 return
             label = cfg.fishAudioVoices.value.get(voice_id) or f'音色 {voice_id[:8]}'
             model.update(reference_id=voice_id, label=label)
+        elif kind == ServiceType.DOBAO:
+            try:
+                voice = normalize_dobao_voice(self.dobaoVoices.currentData())
+            except ValueError:
+                self.status.setText('请选择 Doubao 音色。')
+                return
+            model.update(voice=voice, label=dobao_voice_name(voice))
         else:
             model['label'] = '当前固定模型'
         models[name] = model
@@ -247,14 +272,18 @@ class UserModelsWidget(QWidget):
         for name, model in cfg.gptSovitsUserModels.value.items():
             if not isinstance(model, dict):
                 continue
+            kind = model.get('service', ServiceType.GPT_SOVITS)
+            if kind == ServiceType.SEED_TTS:
+                continue  # Hide legacy controls without rewriting the saved binding.
             row = QWidget(self)
             row_layout = QHBoxLayout(row)
-            kind = model.get('service', ServiceType.GPT_SOVITS)
             title = _SERVICES.get(kind, '未知服务')
             voice = model.get('label', '角色模型')
             if kind == ServiceType.FISH_AUDIO:
                 voice_id = model.get('reference_id', '')
                 voice = cfg.fishAudioVoices.value.get(voice_id) or f'{voice}（音色列表中已移除，绑定保留）'
+            elif kind == ServiceType.DOBAO:
+                voice = dobao_voice_name(model.get('voice'))
             label = BodyLabel(f'{name} → {title} · {voice}', row)
             label.setWordWrap(True)
             label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
@@ -289,6 +318,10 @@ class UserModelsWidget(QWidget):
         model = cfg.gptSovitsUserModels.value[name]
         kind = model.get('service', ServiceType.GPT_SOVITS)
         self.service.setCurrentIndex(self.service.findData(kind))
+        self.service_changed()
+        if kind not in _SERVICES:
+            self.status.setText('这个旧服务已隐藏，原绑定仍保留；选择新的服务后保存即可更换。')
+            return
         if kind == ServiceType.GPT_SOVITS:
             index = next((i for i, p in enumerate(self.pairs)
                           if p.gpt == model.get('gpt') and p.sovits == model.get('sovits')), -1)
@@ -301,6 +334,10 @@ class UserModelsWidget(QWidget):
             self.fishVoices.setCurrentIndex(max(0, index))
             if index < 0:
                 self.status.setText('该音色不在已保存的音色列表中，请先添加或重新选择。')
+        elif kind == ServiceType.DOBAO:
+            populate_dobao_voice_combo(self.dobaoVoices, model.get('voice'))
+            if self.dobaoVoices.currentIndex() < 0:
+                self.status.setText('该绑定尚未选择音色，请重新选择后保存。')
 
     def remove(self, name):
         models = dict(cfg.gptSovitsUserModels.value)

@@ -234,6 +234,8 @@ def test_new_service_registration_and_visible_choices(fish_config):
 
     fish_config.activeTTS.value = ServiceType.FISH_AUDIO
     assert isinstance(get_tts_service(), FishAudioService)
-    assert list(VISIBLE_TTS_SERVICES) == [ServiceType.DOTS, ServiceType.GPT_SOVITS, ServiceType.FISH_AUDIO]
+    assert list(VISIBLE_TTS_SERVICES) == [
+        ServiceType.DOTS, ServiceType.GPT_SOVITS, ServiceType.FISH_AUDIO, ServiceType.DOBAO,
+    ]
     assert ServiceType.EDGE in SUPPORTED_SERVICES
     assert ServiceType.EDGE not in VISIBLE_TTS_SERVICES

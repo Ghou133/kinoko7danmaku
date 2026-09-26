@@ -4,21 +4,21 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python)](https://www.python.org/)
-[![Build and Release](https://github.com/MerlinCN/kinoko7danmaku/actions/workflows/pyinstaller.yml/badge.svg)](https://github.com/MerlinCN/kinoko7danmaku/actions/workflows/pyinstaller.yml)
-[![Release](https://img.shields.io/github/v/release/MerlinCN/kinoko7danmaku)](https://github.com/MerlinCN/kinoko7danmaku/releases)
+[![上游 Build and Release](https://github.com/MerlinCN/kinoko7danmaku/actions/workflows/pyinstaller.yml/badge.svg)](https://github.com/MerlinCN/kinoko7danmaku/actions/workflows/pyinstaller.yml)
+[![上游 Release](https://img.shields.io/github/v/release/MerlinCN/kinoko7danmaku)](https://github.com/MerlinCN/kinoko7danmaku/releases)
 
 </div>
 
-基于 PySide6 的 B 站直播弹幕姬，实时将弹幕、礼物、SC、舰长等消息转为语音播报。
+基于 [MerlinCN/kinoko7danmaku](https://github.com/MerlinCN/kinoko7danmaku) 的 PySide6 B 站直播弹幕姬，实时将弹幕、礼物、SC、舰长等消息转为语音播报。
 
 ## 本地增强版
 
-新增 dots.tts 原生 HTTP/流式播放、用户名与消息独立字典、关键词音频混播。
+新增 dots.tts 原生 HTTP/流式播放、Fish Audio 和 Doubao 语音播报、按用户名选择服务与音色、用户名与消息独立字典、关键词音频混播。
 请先阅读 [新增功能说明](新增功能说明.md)。Windows 可双击 `start.bat` 启动。
 
 ## 特性
 
-- **多 TTS 引擎** — 支持 dots.tts、MiniMax、Fish Speech、GPT-SoVITS、Piper、Edge 六种语音服务
+- **多 TTS 引擎** — 当前界面可选择 dots.tts、GPT-SoVITS、Fish Audio、Doubao；旧版服务配置仍保留
 - **实时监控** — 弹幕 / 礼物 / SC / 舰长 / 醒目留言实时捕获与播报
 - **礼物合并** — 短时间内的连续礼物自动合并播报，避免刷屏
 - **别名字典** — 支持特殊词汇的自定义发音替换
@@ -43,7 +43,7 @@
 ### 安装 & 运行
 
 ```bash
-git clone https://github.com/MerlinCN/kinoko7danmaku.git
+git clone https://github.com/Ghou133/kinoko7danmaku.git
 cd kinoko7danmaku
 uv sync
 uv run src/main.py
@@ -56,18 +56,18 @@ uv run src/main.py
 
 ### Windows 用户
 
-直接下载 [Releases](https://github.com/MerlinCN/kinoko7danmaku/releases) 中的 `Kinoko7Danmaku.exe`，无需安装 Python。
+本分支的增强功能可从源码运行；如需 Windows 可执行文件，可运行 `build.ps1` 自行打包。[上游 Releases](https://github.com/MerlinCN/kinoko7danmaku/releases) 提供上游版本。
 
 ## 支持的 TTS 服务
 
-| 服务 | 说明 | 需要 API Key |
-|------|------|:---:|
-| dots.tts | 本机 HTTP 服务，支持流式播放及关键词音频插播 | 自部署 |
-| MiniMax | 高品质云端语音合成 | ✅ |
-| Fish Speech | 开源语音合成 | 自部署 |
-| GPT-SoVITS | 少样本语音克隆 | 自部署 |
-| Piper | 本地离线 TTS | 自部署 |
-| Edge | 微软免费 TTS | ❌ |
+| 服务 | 说明 | 所需准备 |
+|------|------|------|
+| dots.tts | 本机 HTTP 服务，支持流式播放及关键词音频插播 | 自行部署服务 |
+| GPT-SoVITS | 少样本语音克隆 | 自行部署服务 |
+| Fish Audio | 云端语音合成，可按用户名绑定音色 | API Key |
+| Doubao | 通过本机 DoBao API 合成，可按用户名绑定音色 | 单独安装本机 API 并登录 |
+
+Doubao 的配置步骤见 [Doubao 语音说明](DOBAO-API.md)。旧 Seed-TTS 配置仍可读取，但当前界面已隐藏该选项。
 
 ## 设置
 

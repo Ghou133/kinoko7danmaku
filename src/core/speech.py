@@ -153,38 +153,53 @@ async def speak_template(template: str, **fields: object) -> str | None:
     legacy_streaming = cfg.dotsStreaming.value
     notice = None
     selected_type = target_type
-    local_types = (ServiceType.DOTS, ServiceType.GPT_SOVITS)
+    local_types = (ServiceType.DOTS, ServiceType.GPT_SOVITS, ServiceType.DOBAO)
     names = {
         ServiceType.DOTS: 'dots.tts',
         ServiceType.GPT_SOVITS: 'GPT-SoVITS',
         ServiceType.FISH_AUDIO: 'Fish Audio',
+        ServiceType.SEED_TTS: '豆包语音 Seed-TTS 2.0',
+        ServiceType.DOBAO: 'Doubao',
     }
 
     def api_url(service_type, service):
         field = {
             ServiceType.DOTS: 'dotsApiUrl',
             ServiceType.GPT_SOVITS: 'gptSovitsApiUrl',
+            ServiceType.DOBAO: 'dobaoApiUrl',
         }.get(service_type, '')
         return getattr(getattr(service, '_settings', None), field, getattr(service, 'api_url', ''))
 
+    async def readiness(service_type, url):
+        # Doubao can be stopped, logged out or paused from its separate local UI.
+        # Read its current state in this FIFO slot, not a previous positive cache.
+        if service_type == ServiceType.DOBAO:
+            return await check_service_availability(service_type, url, force=True)
+        return await check_service_availability(service_type, url)
+
     async def choose_service():
         nonlocal notice, selected_type
-        # Ordinary/default and cloud routes do not incur local probes. A mapped
-        # local route is checked only once its FIFO slot actually begins.
-        if binding is None or target_type not in local_types:
+        # Preserve other default/cloud routes. Doubao also checks its local API
+        # when it is the default, but there is no implicit provider priority list.
+        if target_type not in local_types or (binding is None and target_type != ServiceType.DOBAO):
             return target
         target_url = api_url(target_type, target)
-        status = await check_service_availability(target_type, target_url)
+        status = await readiness(target_type, target_url)
         if status.available:
             return target
         target_name = names.get(target_type, str(target_type))
+        if binding is None:
+            raise ValueError(
+                f'当前默认 {target_name} 不可用（{status.detail}）；本条无法播放。'
+                '请启动 API，或在 TTS 设置中选择其他默认服务'
+            )
         reason = f'指定的 {target_name} 当前不可用（{status.detail}）'
         default_name = names.get(default_type, str(default_type))
         if default_type in local_types:
             fallback_url = api_url(default_type, fallback)
             if target_type == default_type and target_url.rstrip('/') == fallback_url.rstrip('/'):
                 raise ValueError(f'{reason}；默认服务也是同一服务，本条无法播放，请启动服务后重试')
-            fallback_status = await check_service_availability(default_type, fallback_url)
+            fallback_status = await readiness(default_type, fallback_url)
             if not fallback_status.available:
                 raise ValueError(
                     f'{reason}；默认 {default_name} 也不可用（{fallback_status.detail}），本条无法播放'

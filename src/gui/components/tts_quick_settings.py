@@ -15,6 +15,7 @@ from gui.components.str_setting_card import StrSettingCard
 from gui.components.sovits_cards import SovitsModelCard, SovitsReferenceCard
 from gui.components.tts_service_card import TTSServiceCard
 from gui.components.fish_audio_cards import fish_audio_group
+from gui.components.dobao_voice_card import DoBaoVoiceCard
 
 
 class StepSettingCard(SettingCard):
@@ -52,6 +53,7 @@ class TTSQuickSettings(QWidget):
         self._build_gpt()
         self._build_dots()
         self._build_fish_audio()
+        self._build_dobao()
         for group in self.groups.values():
             group.setFixedHeight(group.height())
             self.layout_.addWidget(group)
@@ -145,6 +147,11 @@ class TTSQuickSettings(QWidget):
             group, cards = fish_audio_group(self, advanced=advanced)
             (self.advanced if advanced else self.groups)[ServiceType.FISH_AUDIO] = group
             self.cards.update(cards)
+
+    def _build_dobao(self):
+        group = self.group(ServiceType.DOBAO, 'Doubao 试听设置')
+        self.add(group, 'dobaoVoice', DoBaoVoiceCard(group))
+        self.slider(group, 'dobaoSpeed', '语速', '0.5–2.0 倍；1.0 为原速')
 
     def show_service(self, *_):
         active = cfg.activeTTS.value

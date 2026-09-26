@@ -66,6 +66,8 @@ DATA_DIR = get_data_dir()
 SUPPORTED_SERVICES = {
     ServiceType.DOTS: ServiceDetail(name=ServiceType.DOTS, description='dots.tts'),
     ServiceType.FISH_AUDIO: ServiceDetail(name=ServiceType.FISH_AUDIO, description='Fish Audio'),
+    ServiceType.SEED_TTS: ServiceDetail(name=ServiceType.SEED_TTS, description='豆包语音 Seed-TTS 2.0'),
+    ServiceType.DOBAO: ServiceDetail(name=ServiceType.DOBAO, description='Doubao'),
     ServiceType.MINIMAX: ServiceDetail(name=ServiceType.MINIMAX, description='MiniMax'),
     ServiceType.GPT_SOVITS: ServiceDetail(name=ServiceType.GPT_SOVITS, description='GPT-SoVITS'),
     ServiceType.FISH_SPEECH: ServiceDetail(name=ServiceType.FISH_SPEECH, description='Fish Speech'),
@@ -76,7 +78,7 @@ SUPPORTED_SERVICES = {
 # Keep legacy adapters/configuration readable while limiting the UI choices.
 VISIBLE_TTS_SERVICES = {
     service: SUPPORTED_SERVICES[service]
-    for service in (ServiceType.DOTS, ServiceType.GPT_SOVITS, ServiceType.FISH_AUDIO)
+    for service in (ServiceType.DOTS, ServiceType.GPT_SOVITS, ServiceType.FISH_AUDIO, ServiceType.DOBAO)
 }
 
 FISH_AUDIO_MODELS = ['s2.1-pro', 's2.1-pro-free', 's2-pro', 's1']

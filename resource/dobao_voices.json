@@ -1,0 +1,304 @@
+{
+  "voices": [
+    {
+      "id": "104",
+      "name": "温柔桃子（升级版）",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_female_wenroutaozi_uranus_bigtts",
+      "gender": "女",
+      "age": "青年",
+      "tags": ["温柔"]
+    },
+    {
+      "id": "92865679864322",
+      "name": "磁性俊宇（升级版）",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_cixingjunyu_uranus_bigtts",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["帅气"]
+    },
+    {
+      "id": "5238154621186",
+      "name": "阳光甜妹（升级版）",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_female_yangguangtianmei_uranus_bigtts",
+      "gender": "女",
+      "age": "青年",
+      "tags": ["温柔"]
+    },
+    {
+      "id": "29798555618523394",
+      "name": "温柔桃子（经典版）",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_female_wenroutaozi_v2_mars_bigtts",
+      "gender": "女",
+      "age": "青年",
+      "tags": ["温柔"]
+    },
+    {
+      "id": "2",
+      "name": "邻家女孩",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_female_f261_conversation_wvae_bigtts",
+      "gender": "女",
+      "age": "青年",
+      "tags": ["耐心"]
+    },
+    {
+      "id": "28",
+      "name": "魅力苏菲",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_female_sophie_conversation_wvae_bigtts",
+      "gender": "女",
+      "age": "青年",
+      "tags": ["温柔"]
+    },
+    {
+      "id": "18770280826114",
+      "name": "撒娇学妹",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_female_yuanqinvyou_wvae_bigtts",
+      "gender": "女",
+      "age": "少年",
+      "tags": ["娇气"]
+    },
+    {
+      "id": "76",
+      "name": "邻家男孩",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_linjiananhai_moon_bigtts",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["自信"]
+    },
+    {
+      "id": "31",
+      "name": "悠悠君子",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_M100_conversation_wvae_bigtts",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["谦虚"]
+    },
+    {
+      "id": "2341563809026",
+      "name": "温暖阿虎",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_ahu_conversation_wvae_bigtts",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["阳光"]
+    },
+    {
+      "id": "2339979394818",
+      "name": "少年梓辛",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_m286_conversation_wvae_bigtts",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["温柔"]
+    },
+    {
+      "id": "92790090331138",
+      "name": "阳光阿辰",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_qingyiyuxuan_mars_bigtts",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["阳光"]
+    },
+    {
+      "id": "3971344832695810",
+      "name": "腹黑霸总",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_c021bc19bf92",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["磁性"]
+    },
+    {
+      "id": "3091791067128578",
+      "name": "冷酷霸总",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_e0b9b93ee322",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["磁性"]
+    },
+    {
+      "id": "15811456332290",
+      "name": "傲娇霸总",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_aojiaobazong_wvae_bigtts",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["深情"]
+    },
+    {
+      "id": "18633266128130",
+      "name": "霸道总裁",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_d4d40acd33dd",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["霸道"]
+    },
+    {
+      "id": "20644528308581890",
+      "name": "温柔子言",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_cheng_mars_bigtts",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["温柔"]
+    },
+    {
+      "id": "20633949137530626",
+      "name": "率性阿哲",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_litiebanzi_mars_bigtts",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["直率"]
+    },
+    {
+      "id": "4305611392398338",
+      "name": "温柔陆辰",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_df4fc4d1ce4b",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["奶狗"]
+    },
+    {
+      "id": "15998292245506",
+      "name": "深夜播客",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_shenyeboke_wvae_bigtts",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["潇洒"]
+    },
+    {
+      "id": "3092232558775554",
+      "name": "甜美小雪",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_6acf86286e24",
+      "gender": "女",
+      "age": "青年",
+      "tags": ["可爱"]
+    },
+    {
+      "id": "3092321416028418",
+      "name": "清冷阿梦",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_16cd9a58768e",
+      "gender": "女",
+      "age": "青年",
+      "tags": ["成熟"]
+    },
+    {
+      "id": "1704007725058",
+      "name": "东方浩然",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_dongfanghaoran_moon_bigtts",
+      "gender": "男",
+      "age": "中年",
+      "tags": ["坚定"]
+    },
+    {
+      "id": "3092232804622850",
+      "name": "病娇少爷",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_72afa6c5dc07",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["疯批"]
+    },
+    {
+      "id": "92617757524738",
+      "name": "清爽男大",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "zh_male_junlangxize_mars_bigtts",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["温柔"]
+    },
+    {
+      "id": "1551728731854082",
+      "name": "清朗宇澄",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_9b3bc6941076",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["帅气"]
+    },
+    {
+      "id": "1615285353850626",
+      "name": "奶音俊少",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_932b3f52bf3d",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["奶声奶气"]
+    },
+    {
+      "id": "870127902216450",
+      "name": "沉稳皓轩",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_5a413fbc14fc",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["磁性"]
+    },
+    {
+      "id": "1551957662395650",
+      "name": "温柔俊彦",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_0ce6ef379e73",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["善良"]
+    },
+    {
+      "id": "1551876235983362",
+      "name": "青涩沐阳",
+      "language": "中文",
+      "language_code": "zh",
+      "style_id": "ICL_afedffe4586c",
+      "gender": "男",
+      "age": "青年",
+      "tags": ["明亮"]
+    }
+  ]
+}

@@ -10,6 +10,8 @@ class ServiceType(StrEnum):
 
     FISH_SPEECH = 'fish_speech'
     FISH_AUDIO = 'fish_audio'
+    SEED_TTS = 'seed_tts'
+    DOBAO = 'dobao_tts'
     GPT_SOVITS = 'gpt_sovits'
     MINIMAX = 'minimax'
     PIPER = 'piper'

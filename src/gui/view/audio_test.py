@@ -10,7 +10,8 @@ from qfluentwidgets import (
 )
 from qfluentwidgets import FluentIcon as FIF
 
-from core.const import SUPPORTED_SERVICES
+from core.const import SUPPORTED_SERVICES, VISIBLE_TTS_SERVICES
+from core.dobao_voices import dobao_voice_name
 from core.qconfig import cfg
 from core.speech import speak_template
 from core.user_voices import user_voice_binding
@@ -59,7 +60,7 @@ class AudioTestInterface(ScrollArea):
         self.test_button.clicked.connect(self._on_test_button_clicked)
         self.user_name_edit.textChanged.connect(self._refresh_route_hint)
         for item in (cfg.activeTTS, cfg.gptSovitsUserModels,
-                     cfg.gptSovitsUserModelsEnabled, cfg.fishAudioVoices):
+                     cfg.gptSovitsUserModelsEnabled, cfg.fishAudioVoices, cfg.dobaoVoice):
             item.valueChanged.connect(self._refresh_route_hint)
         self._refresh_route_hint()
 
@@ -68,21 +69,32 @@ class AudioTestInterface(ScrollArea):
         model = user_voice_binding(username)
         if model is not None:
             service_type = model['service']
+            if service_type not in VISIBLE_TTS_SERVICES:
+                self.route_hint.setText('该用户名保留了已隐藏服务的绑定；清空用户名可试听当前默认服务。')
+                return
             service = SUPPORTED_SERVICES[service_type].description
             label = model.get('label') or '该用户绑定的角色'
             if service_type == 'fish_audio':
                 label = cfg.fishAudioVoices.value.get(model.get('reference_id'), label)
+            elif service_type == 'dobao_tts':
+                label = dobao_voice_name(model.get('voice'))
             elif service_type == 'dots_tts':
                 label = '服务当前固定模型'
             availability = ('本地服务未就绪时临时使用默认服务。'
-                            if service_type in ('gpt_sovits', 'dots_tts') else '')
+                            if service_type in ('gpt_sovits', 'dots_tts', 'dobao_tts') else '')
             self.route_hint.setText(
                 f'本次按用户名映射使用 {service} · {label}。{availability}'
                 '清空用户名即可试听下方选择的服务和模型。'
             )
         else:
+            if cfg.activeTTS.value not in VISIBLE_TTS_SERVICES:
+                self.route_hint.setText('当前默认服务已隐藏，请先在下方选择新的默认服务。')
+                return
             service = SUPPORTED_SERVICES[cfg.activeTTS.value].description
-            self.route_hint.setText(f'本次使用 {service} 和下方所选模型；修改参数后再次点击试听。')
+            if cfg.activeTTS.value == 'dobao_tts':
+                self.route_hint.setText(f'本次使用 {service} · {dobao_voice_name(cfg.dobaoVoice.value)}；修改音色后再次点击试听。')
+            else:
+                self.route_hint.setText(f'本次使用 {service} 和下方所选模型；修改参数后再次点击试听。')
 
     @asyncSlot()
     async def _on_test_button_clicked(self) -> None:

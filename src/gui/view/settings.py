@@ -41,6 +41,8 @@ from .user_dictionary import UserDictionaryInterface
 from gui.components.sovits_cards import SovitsFolderCard, SovitsModelCard, SovitsApiCard, SovitsReferenceCard
 from gui.components.tts_service_card import TTSServiceCard
 from gui.components.fish_audio_cards import fish_audio_group
+from gui.components.dobao_voice_card import DoBaoVoiceCard
+from gui.components.dobao_cards import DoBaoApiCard, DoBaoFolderCard
 
 
 class SettingsInterface(ScrollArea):
@@ -683,6 +685,31 @@ class SettingsInterface(ScrollArea):
         )
 
         self.fishAudioGroup, self.fishAudioCards = fish_audio_group(self.scrollWidget, credentials=True)
+
+        self.dobaoGroup = SettingCardGroup('Doubao 设置', self.scrollWidget)
+        self.dobaoFolderCard = DoBaoFolderCard(cfg.dobaoFolder, self.dobaoGroup)
+        self.dobaoStartCard = DoBaoApiCard(self.dobaoGroup)
+        self.dobaoApiUrlCard = StrSettingCard(
+            cfg.dobaoApiUrl, FIF.LINK, 'API 地址',
+            '使用上方“启动 / 检查 API”，再打开登录页配置自己的账号', self.dobaoGroup,
+            placeholder='http://127.0.0.1:9882',
+        )
+        self.dobaoVoiceCard = DoBaoVoiceCard(self.dobaoGroup)
+        for card in (
+            self.dobaoFolderCard,
+            self.dobaoStartCard,
+            self.dobaoApiUrlCard,
+            self.dobaoVoiceCard,
+            FloatRangeSettingCard(
+                cfg.dobaoSpeed, FIF.SPEED_OFF, '语速', '0.5–2.0 倍；1.0 为原速',
+                parent=self.dobaoGroup,
+            ),
+            RangeSettingCard(
+                cfg.dobaoTimeout, FIF.STOP_WATCH, '请求超时（秒）',
+                '请求依次处理，至少间隔 3 秒；失败后不会自动重试', self.dobaoGroup,
+            ),
+        ):
+            self.dobaoGroup.addSettingCard(card)
 
         # 初始化布局
         self._init_layout()

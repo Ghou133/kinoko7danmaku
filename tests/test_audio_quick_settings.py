@@ -55,9 +55,9 @@ def test_only_current_service_controls_and_no_connection_fields(preview):
 
     cfg, page = preview
     panel = page.quick_settings
-    assert set(panel.groups) == {'dots_tts', 'gpt_sovits', 'fish_audio'}
+    assert set(panel.groups) == {'dots_tts', 'gpt_sovits', 'fish_audio', 'dobao_tts'}
     assert [panel.serviceCard.comboBox.itemData(i) for i in range(panel.serviceCard.comboBox.count())] == [
-        'dots_tts', 'gpt_sovits', 'fish_audio',
+        'dots_tts', 'gpt_sovits', 'fish_audio', 'dobao_tts',
     ]
     for service in panel.groups:
         panel.serviceCard.comboBox.setCurrentIndex(panel.serviceCard.comboBox.findData(service))
@@ -84,13 +84,16 @@ def test_controls_sync_to_regular_settings_and_persist(preview):
     from gui.view.settings import SettingsInterface
     from qfluentwidgets import RangeSettingCard
     from gui.components.float_range_setting_card import FloatRangeSettingCard
+    from core.dobao_voices import get_dobao_voices, DEFAULT_DOBAO_VOICE, CLASSIC_DOBAO_VOICE
 
     cfg, page = preview
     settings = SettingsInterface()
     try:
         from PySide6.QtWidgets import QLineEdit
         assert settings.fishAudioCards['fishAudioApiKey'].lineEdit.echoMode() == QLineEdit.Password
-        assert set(settings.tts_interface.groups) == {'dots_tts', 'gpt_sovits', 'fish_audio'}
+        assert not hasattr(settings, 'seedTtsApiKeyCard')
+        assert set(settings.tts_interface.groups) == {'dots_tts', 'gpt_sovits', 'fish_audio', 'dobao_tts'}
+        assert not hasattr(settings, 'seedTtsGroup')
         panel = page.quick_settings
         panel.cards['dotsNumSteps'].spinBox.setValue(64)
         panel.cards['dotsSpeed'].slider.setValue(13)
@@ -107,9 +110,76 @@ def test_controls_sync_to_regular_settings_and_persist(preview):
         persisted = json.loads((DATA_DIR / 'config.json').read_text('utf-8'))
         assert persisted['DotsTTSService']['NumSteps'] == 32
         assert persisted['DotsTTSService']['Speed'] == 1.1
+        assert 'seedTtsVoice' not in panel.cards
+        assert 'seedTtsSpeed' not in panel.cards
+        choice = next(voice for voice in get_dobao_voices()
+                      if voice['id'] not in (DEFAULT_DOBAO_VOICE, CLASSIC_DOBAO_VOICE))
+        combo = panel.cards['dobaoVoice'].comboBox
+        combo.setCurrentIndex(combo.findData(choice['id']))
+        panel.cards['dobaoSpeed'].slider.setValue(12)
+        assert cfg.dobaoVoice.value == choice['id']
+        assert settings.dobaoVoiceCard.comboBox.currentData() == choice['id']
+        assert cfg.dobaoSpeed.value == 1.2
+        persisted = json.loads((DATA_DIR / 'config.json').read_text('utf-8'))
+        assert persisted['DoBaoTTSService']['Voice'] == choice['id']
+        assert persisted['DoBaoTTSService']['Speed'] == 1.2
+        assert 'Cookie' not in persisted['DoBaoTTSService']
+        assert settings.dobaoStartCard in settings.dobaoGroup.findChildren(type(settings.dobaoStartCard))
+        assert settings.dobaoFolderCard.configItem is cfg.dobaoFolder
     finally:
         settings.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+
+def test_doubao_full_offline_catalog_alias_and_unknown_saved_value(preview):
+    from core.dobao_voices import get_dobao_voices, CLASSIC_DOBAO_VOICE, dobao_voice_name
+
+    cfg, page = preview
+    cfg.activeTTS.value = 'dobao_tts'
+    combo = page.quick_settings.cards['dobaoVoice'].comboBox
+    catalog = get_dobao_voices()
+    assert len(catalog) > 2
+    assert {combo.itemData(i) for i in range(combo.count())} == {voice['id'] for voice in catalog}
+    cfg.dobaoVoice.value = 'taozi-classic'
+    assert combo.currentData() == CLASSIC_DOBAO_VOICE
+    assert cfg.dobaoVoice.value == 'taozi-classic'  # Displaying an alias is not an edit.
+    assert dobao_voice_name(CLASSIC_DOBAO_VOICE) in page.route_hint.text()
+    cfg.dobaoVoice.value = 'future-user-saved-voice'
+    assert combo.currentData() == 'future-user-saved-voice'
+    assert '目录未收录' in combo.currentText()
+    assert cfg.dobaoVoice.value == 'future-user-saved-voice'
+    assert 'future-user-saved-voice' in page.route_hint.text()
+    combo.setCurrentIndex(combo.findData(catalog[-1]['id']))
+    assert cfg.dobaoVoice.value == catalog[-1]['id']
+    assert catalog[-1]['name'] in page.route_hint.text()
+
+
+def test_hidden_seed_selection_is_explicit_and_config_stays_until_user_changes_it(preview):
+    import json
+    from PySide6.QtCore import QCoreApplication
+
+    cfg, page = preview
+    panel = page.quick_settings
+    seed_values = (cfg.seedTtsVoice.value, cfg.seedTtsApiKey.value)
+    cfg.activeTTS.value = 'seed_tts'
+    assert panel.serviceCard.comboBox.currentIndex() == -1
+    assert '旧服务已隐藏' in panel.serviceCard.comboBox.text()
+    assert '配置仍保留' in panel.serviceCard.contentLabel.text()
+    assert 'seed' not in panel.serviceCard.contentLabel.text().lower()
+    assert '已隐藏' in page.route_hint.text()
+    assert 'seed' not in page.route_hint.text().lower()
+    assert all(group.isHidden() for group in panel.groups.values())
+    assert cfg.activeTTS.value == 'seed_tts'
+    assert (cfg.seedTtsVoice.value, cfg.seedTtsApiKey.value) == seed_values
+    choices = [panel.serviceCard.comboBox.itemData(i) for i in range(panel.serviceCard.comboBox.count())]
+    assert 'seed_tts' not in choices and 'dobao_tts' in choices
+    panel.serviceCard.comboBox.setCurrentIndex(panel.serviceCard.comboBox.findData('dobao_tts'))
+    assert cfg.activeTTS.value == 'dobao_tts'
+    QCoreApplication.processEvents()
+    output = Path(__file__).resolve().parents[1] / 'outputs' / 'doubao-validation-20260926'
+    output.mkdir(parents=True, exist_ok=True)
+    assert page.grab().save(str(output / 'global-dobao-settings.png'))
+    (output / 'visible-services.json').write_text(json.dumps(choices, ensure_ascii=False, indent=2), 'utf-8')
 
 
 @pytest.mark.asyncio
@@ -159,7 +229,7 @@ def test_layout_and_capture(preview):
     cfg, page = preview
     output = Path(__file__).resolve().parents[1] / 'build' / 'audio-controls-check'
     output.mkdir(parents=True, exist_ok=True)
-    for service in ('dots_tts', 'fish_audio', 'gpt_sovits'):
+    for service in ('dots_tts', 'fish_audio', 'gpt_sovits', 'dobao_tts'):
         cfg.activeTTS.value = service
         QCoreApplication.processEvents()
         panel = page.quick_settings
@@ -176,9 +246,12 @@ def test_layout_and_capture(preview):
 
 
 @pytest.mark.parametrize('service,label', [
-    ('gpt_sovits', '角色 A'), ('dots_tts', '服务当前固定模型'), ('fish_audio', '网站音色'),
+    ('gpt_sovits', '角色 A'), ('dots_tts', '服务当前固定模型'),
+    ('fish_audio', '网站音色'), ('seed_tts', '已隐藏服务的绑定'),
+    ('dobao_tts', None),
 ])
 def test_audition_hint_explains_cross_service_binding(preview, service, label):
+    from core.dobao_voices import dobao_voice_name
     cfg, page = preview
     cfg.activeTTS.value = 'fish_audio'
     cfg.gptSovitsUserModelsEnabled.value = True
@@ -187,10 +260,16 @@ def test_audition_hint_explains_cross_service_binding(preview, service, label):
     cfg.gptSovitsUserModels.value = {'Alice': {
         'service': service, 'enabled': True, 'label': '角色 A',
         'gpt': 'a.ckpt', 'sovits': 'a.pth', 'reference_id': voice,
+        'speaker': 'seed-speaker-a', 'voice': 'taozi-classic',
     }}
     page.user_name_edit.setText('Alice')
+    if service == 'dobao_tts':
+        label = dobao_voice_name('taozi-classic')
     assert label in page.route_hint.text()
-    assert ('本地服务未就绪' in page.route_hint.text()) == (service != 'fish_audio')
+    assert ('本地服务未就绪' in page.route_hint.text()) == (service in ('gpt_sovits', 'dots_tts', 'dobao_tts'))
+    if service == 'seed_tts':
+        assert 'seed' not in page.route_hint.text().lower()
+        assert cfg.gptSovitsUserModels.value['Alice']['speaker'] == 'seed-speaker-a'
     cfg.gptSovitsUserModelsEnabled.value = False
     assert '本次使用 Fish Audio' in page.route_hint.text()
 

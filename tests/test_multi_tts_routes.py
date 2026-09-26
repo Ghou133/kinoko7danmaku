@@ -1,22 +1,25 @@
 import asyncio
+import base64
+import json
 
 from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
+import httpx
 
 from core.stream_audio import PCMChunk
 
 
 VOICE_A = 'a' * 32
 VOICE_B = 'b' * 32
-SERVICES = ('dots_tts', 'gpt_sovits', 'fish_audio')
+SERVICES = ('dots_tts', 'gpt_sovits', 'fish_audio', 'seed_tts', 'dobao_tts')
 
 
 @pytest.fixture
 def routes(config):
-    names = [name for name in dir(config) if name.startswith(('gptSovits', 'fishAudio'))]
+    names = [name for name in dir(config) if name.startswith(('gptSovits', 'fishAudio', 'seedTts', 'dobao'))]
     saved = {name: deepcopy(getattr(config, name).value) for name in names}
     config.gptSovitsUserModelsEnabled.value = True
     config.gptSovitsUserModels.value = {}
@@ -24,6 +27,7 @@ def routes(config):
     config.gptSovitsRouteFromDots.value = False
     config.fishAudioReferenceId.value = VOICE_B
     config.fishAudioApiKey.value = 'test-only-key'
+    config.seedTtsVoice.value = 'default-seed-speaker'
     config.aliasDict.value = {}
     config.messageAliasDict.value = {}
     config.audioClipDict.value = {}
@@ -40,14 +44,19 @@ def routes(config):
 
 @pytest.mark.parametrize('default', SERVICES)
 @pytest.mark.parametrize('target', SERVICES)
-def test_every_visible_default_can_route_to_every_visible_service(routes, default, target):
+def test_every_supported_default_can_route_to_every_supported_service(routes, default, target):
     from core.user_voices import service_for_user, user_model_overrides, user_voice_binding
 
     routes.activeTTS.value = default
-    original = {'service': target, 'gpt': 'A.ckpt', 'sovits': 'A.pth', 'reference_id': VOICE_A}
+    original = {
+        'service': target, 'gpt': 'A.ckpt', 'sovits': 'A.pth',
+        'reference_id': VOICE_A, 'speaker': 'per-user-seed-speaker', 'voice': 'taozi-classic',
+    }
     routes.gptSovitsUserModels.value = {'Alice': original}
     service = service_for_user('Alice')
-    expected = dict(zip(SERVICES, ('DotsTTSService', 'GPTSovitsService', 'FishAudioService')))
+    expected = dict(zip(SERVICES, (
+        'DotsTTSService', 'GPTSovitsService', 'FishAudioService', 'SeedTTSService', 'DoBaoTTSService',
+    )))
     assert type(service).__name__ == expected[target]
     assert routes.activeTTS.value == default
     assert routes.gptSovitsUserModels.value['Alice'] == original
@@ -56,6 +65,11 @@ def test_every_visible_default_can_route_to_every_visible_service(routes, defaul
     if target == 'fish_audio':
         assert service._request('你好')[1]['reference_id'] == VOICE_A
         assert routes.fishAudioReferenceId.value == VOICE_B
+    if target == 'seed_tts':
+        assert service._settings.seedTtsVoice == 'per-user-seed-speaker'
+        assert routes.seedTtsVoice.value == 'default-seed-speaker'
+    if target == 'dobao_tts':
+        assert service._settings.dobaoVoice == 'taozi-classic'
 
 
 def test_binding_is_a_copy_and_legacy_entry_is_preserved(routes):
@@ -114,7 +128,7 @@ class Adapter:
         self.streaming_enabled = streaming
         self.fail = fail
         self.api_url = url
-        self._settings = SimpleNamespace(gptSovitsApiUrl=url, dotsApiUrl=url)
+        self._settings = SimpleNamespace(gptSovitsApiUrl=url, dotsApiUrl=url, dobaoApiUrl=url)
 
     async def text_to_speech(self, text):
         self.events.append((self.name, 'whole', text))
@@ -171,6 +185,10 @@ def install_route(monkeypatch, routes, target_type, default_type, target, fallba
     ('dots_tts', 'gpt_sovits', {'dots_tts': False, 'gpt_sovits': True}, 'fallback', ['dots_tts', 'gpt_sovits']),
     ('gpt_sovits', 'fish_audio', {'gpt_sovits': True}, 'target', ['gpt_sovits']),
     ('fish_audio', 'dots_tts', {}, 'target', []),
+    ('seed_tts', 'dots_tts', {}, 'target', []),
+    ('dobao_tts', 'fish_audio', {'dobao_tts': True}, 'target', ['dobao_tts']),
+    ('dobao_tts', 'fish_audio', {'dobao_tts': False}, 'fallback', ['dobao_tts']),
+    ('dots_tts', 'dobao_tts', {'dots_tts': False, 'dobao_tts': True}, 'fallback', ['dots_tts', 'dobao_tts']),
 ])
 async def test_local_availability_fallback_and_actual_adapter_streaming(
     routes, monkeypatch, playback, target_type, default_type, available, expected, checks
@@ -182,8 +200,9 @@ async def test_local_availability_fallback_and_actual_adapter_streaming(
     target = Adapter('target', events, streaming=False)
     fallback = Adapter('fallback', events, streaming=True)
 
-    async def check(service, url):
+    async def check(service, url, **kwargs):
         calls.append(service)
+        assert kwargs == ({'force': True} if service == 'dobao_tts' else {})
         return ServiceAvailability(available[service], 'test status')
 
     install_route(monkeypatch, routes, target_type, default_type, target, fallback, check)
@@ -193,6 +212,116 @@ async def test_local_availability_fallback_and_actual_adapter_streaming(
     assert events[1:] == [('target', 'close'), ('fallback', 'close')]
     assert (notice is not None) == (expected == 'fallback')
     assert routes.activeTTS.value == default_type
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('state,reason', [
+    ('offline', '无法连接'), ('logged-out', '尚未登录'), ('paused', '已暂停'),
+])
+async def test_doubao_refreshes_stale_ready_state_before_falling_back(routes, monkeypatch, playback, state, reason):
+    from core import tts_availability
+    from core.speech import speak_template
+
+    events, calls = [], []
+    target = Adapter('target', events, url='http://127.0.0.1:19882')
+    fallback = Adapter('fallback', events)
+    ready = True
+    original_client = httpx.AsyncClient
+
+    def handle(request):
+        calls.append((request.method, request.url.path))
+        assert request.method == 'GET' and request.url.path == '/health'
+        if not ready and state == 'offline':
+            raise httpx.ConnectError('test-only-private-value', request=request)
+        document = {'service': 'dobao-local-api', 'status': 'running', 'credential_configured': True,
+                    'upstream_verified': True, 'upstream_paused': None}
+        if not ready and state == 'logged-out':
+            document['credential_configured'] = False
+        if not ready and state == 'paused':
+            document['upstream_paused'] = {'code': 'UPSTREAM_BLOCKED'}
+        return httpx.Response(200, json=document)
+
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: original_client(
+        transport=httpx.MockTransport(handle), **kwargs,
+    ))
+    tts_availability._cache.clear()
+    check = tts_availability.check_service_availability
+    try:
+        assert (await check('dobao_tts', target.api_url)).available
+        ready = False
+        install_route(monkeypatch, routes, 'dobao_tts', 'fish_audio', target, fallback, check)
+        notice = await speak_template('{message}', user_name='Alice', message='你好')
+        assert reason in notice and '默认 Fish Audio' in notice
+        assert 'test-only-private-value' not in notice
+        assert calls == [('GET', '/health'), ('GET', '/health')]
+        assert events == [('fallback', 'whole', '你好'), ('target', 'close'), ('fallback', 'close')]
+        assert routes.activeTTS.value == 'fish_audio'
+        assert routes.gptSovitsUserModels.value['Alice']['service'] == 'dobao_tts'
+    finally:
+        tts_availability._cache.clear()
+
+
+@pytest.mark.asyncio
+async def test_unmapped_doubao_checks_readiness_without_inventing_fallback(routes, monkeypatch, playback):
+    import tts_service
+    from core import tts_availability, user_voices
+    from core.speech import speak_template
+
+    events, calls = [], []
+    target = Adapter('target', events)
+    routes.activeTTS.value = 'dobao_tts'
+    routes.gptSovitsUserModels.value = {}
+    monkeypatch.setattr(user_voices, 'service_for_user', lambda _: target)
+    monkeypatch.setattr(tts_service, 'get_tts_service', lambda: pytest.fail('No independent fallback was configured'))
+
+    async def check(service, url, **kwargs):
+        calls.append((service, kwargs))
+        return tts_availability.ServiceAvailability(len(calls) > 1, '尚未启动')
+
+    monkeypatch.setattr(tts_availability, 'check_service_availability', check)
+    with pytest.raises(ValueError, match='默认 Doubao 不可用.*选择其他默认服务'):
+        await speak_template('{message}', user_name='Nobody', message='第一条')
+    assert events == [('target', 'close')]
+    assert routes.activeTTS.value == 'dobao_tts'
+    assert await speak_template('{message}', user_name='Nobody', message='第二条') is None
+    assert calls == [('dobao_tts', {'force': True})] * 2
+    assert events == [('target', 'close'), ('target', 'whole', '第二条'), ('target', 'close')]
+
+
+@pytest.mark.asyncio
+async def test_mapped_doubao_does_not_repeat_same_unavailable_default(routes, monkeypatch, playback):
+    from core.speech import speak_template
+    from core.tts_availability import ServiceAvailability
+
+    events, calls = [], []
+    target, fallback = Adapter('target', events), Adapter('fallback', events)
+
+    async def check(service, url, **kwargs):
+        calls.append((service, kwargs))
+        return ServiceAvailability(False, '尚未登录')
+
+    install_route(monkeypatch, routes, 'dobao_tts', 'dobao_tts', target, fallback, check)
+    with pytest.raises(ValueError, match='默认服务也是同一服务'):
+        await speak_template('{message}', user_name='Alice', message='你好')
+    assert calls == [('dobao_tts', {'force': True})]
+    assert events == [('target', 'close'), ('fallback', 'close')]
+
+
+@pytest.mark.asyncio
+async def test_doubao_failure_after_ready_check_does_not_replay_on_default(routes, monkeypatch, playback):
+    from core.speech import speak_template
+    from core.tts_availability import ServiceAvailability
+
+    events = []
+    target, fallback = Adapter('target', events, fail=True), Adapter('fallback', events)
+
+    async def check(service, url, **kwargs):
+        return ServiceAvailability(True, 'ready')
+
+    install_route(monkeypatch, routes, 'dobao_tts', 'fish_audio', target, fallback, check)
+    with pytest.raises(ValueError, match='synthesis failed'):
+        await speak_template('{message}', user_name='Alice', message='你好')
+    assert events == [('target', 'whole', '你好'), ('target', 'close'), ('fallback', 'close')]
 
 
 @pytest.mark.asyncio
@@ -219,7 +348,8 @@ async def test_unavailable_default_fails_promptly_and_queue_continues(routes, mo
 
 
 @pytest.mark.asyncio
-async def test_partial_stream_failure_is_never_retried_on_default(routes, monkeypatch, playback):
+@pytest.mark.parametrize('target_type', ['gpt_sovits', 'dobao_tts'])
+async def test_partial_stream_failure_is_never_retried_on_default(routes, monkeypatch, playback, target_type):
     from core import tts_availability
     from core.speech import speak_template
     from core.tts_availability import ServiceAvailability
@@ -228,10 +358,10 @@ async def test_partial_stream_failure_is_never_retried_on_default(routes, monkey
     target = Adapter('target', events, streaming=True, fail=True)
     fallback = Adapter('fallback', events)
 
-    async def check(service, url):
+    async def check(service, url, **kwargs):
         return ServiceAvailability(True, 'ready')
 
-    install_route(monkeypatch, routes, 'gpt_sovits', 'fish_audio', target, fallback, check)
+    install_route(monkeypatch, routes, target_type, 'fish_audio', target, fallback, check)
     monkeypatch.setattr(
         tts_availability, 'invalidate_service_availability',
         lambda service, url: invalidated.append((service, url)),
@@ -239,11 +369,12 @@ async def test_partial_stream_failure_is_never_retried_on_default(routes, monkey
     with pytest.raises(ValueError, match='stream interrupted'):
         await speak_template('{message}', user_name='Alice', message='你好')
     assert events == [('target', 'stream', '你好'), ('target', 'close'), ('fallback', 'close')]
-    assert invalidated == [('gpt_sovits', target.api_url)]
+    assert invalidated == [(target_type, target.api_url)]
 
 
 @pytest.mark.asyncio
-async def test_cloud_failure_does_not_probe_or_retry_local_default(routes, monkeypatch, playback):
+@pytest.mark.parametrize('cloud', ['fish_audio', 'seed_tts'])
+async def test_cloud_failure_does_not_probe_or_retry_local_default(routes, monkeypatch, playback, cloud):
     from core.speech import speak_template
 
     events = []
@@ -253,10 +384,124 @@ async def test_cloud_failure_does_not_probe_or_retry_local_default(routes, monke
     async def check(*args):
         pytest.fail('Cloud routes never probe local services')
 
-    install_route(monkeypatch, routes, 'fish_audio', 'dots_tts', target, fallback, check)
+    install_route(monkeypatch, routes, cloud, 'dots_tts', target, fallback, check)
     with pytest.raises(ValueError, match='synthesis failed'):
         await speak_template('{message}', user_name='Alice', message='你好')
     assert events == [('target', 'whole', '你好'), ('target', 'close'), ('fallback', 'close')]
+
+
+@pytest.mark.asyncio
+async def test_seed_username_routes_reach_cloud_with_distinct_speakers(routes, monkeypatch, playback):
+    from core import tts_availability
+    from core.speech import speak_template
+
+    routes.activeTTS.value = 'dots_tts'
+    routes.seedTtsApiKey.value = 'test-only-secret'
+    routes.seedTtsStreaming.value = True
+    routes.gptSovitsUserModels.value = {
+        'Alice': {'service': 'seed_tts', 'speaker': 'seed-speaker-a'},
+        'Bob': {'service': 'seed_tts', 'speaker': 'seed-speaker-b'},
+    }
+    requests, played = [], []
+
+    def handle(request):
+        requests.append(json.loads(request.content)['req_params'])
+        audio = base64.b64encode(b'\x01\x00').decode()
+        return httpx.Response(200, content=json.dumps({'code': 0, 'data': audio}).encode())
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: original(
+        transport=httpx.MockTransport(handle), **kwargs,
+    ))
+
+    async def no_probe(*args, **kwargs):
+        pytest.fail('A Seed-TTS cloud route must not probe local models')
+
+    async def consume(stream):
+        try:
+            async for chunk in stream:
+                played.append(chunk.data)
+        finally:
+            await stream.aclose()
+
+    monkeypatch.setattr(tts_availability, 'check_service_availability', no_probe)
+    monkeypatch.setattr(playback, 'play_pcm_stream', consume)
+    await speak_template('{user_name}说{message}', user_name='Alice', message='你好')
+    await speak_template('{user_name}说{message}', user_name='Bob', message='欢迎')
+    assert [(item['speaker'], item['text']) for item in requests] == [
+        ('seed-speaker-a', 'Alice说你好'), ('seed-speaker-b', 'Bob说欢迎'),
+    ]
+    assert played == [b'\x01\x00', b'\x01\x00']
+
+
+@pytest.mark.asyncio
+async def test_dobao_username_alias_and_voice_are_snapshotted_through_real_queue(routes, monkeypatch, playback):
+    import io
+    import wave
+    from core import tts_availability
+    from core.dobao_voices import CLASSIC_DOBAO_VOICE, DEFAULT_DOBAO_VOICE
+    from core.speech import speak_template
+    from core.user_voices import user_voice_binding
+    from tts_service import dobao
+
+    routes.activeTTS.value = 'fish_audio'
+    routes.dobaoApiUrl.value = 'http://127.0.0.1:9882'
+    routes.dobaoVoice.value = 'taozi'
+    routes.aliasDict.value = {'Alice': '小桃'}
+    routes.messageAliasDict.value = {'hello': '你好'}
+    routes.gptSovitsUserModels.value = {'Alice': {'service': 'dobao_tts', 'voice': 'taozi-classic'}}
+    assert user_voice_binding('小桃') is None  # Alias changes speech, never lookup identity.
+    output = io.BytesIO()
+    with wave.open(output, 'wb') as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(24000)
+        wav.writeframes(b'\x01\x00' * 24)
+    audio = output.getvalue()
+    requests, played = [], []
+    tts_availability._cache.clear()
+    monkeypatch.setattr(dobao, 'MIN_REQUEST_INTERVAL', 0.01)
+
+    def handle(request):
+        if request.method == 'GET':
+            assert request.url.path == '/health'
+            return httpx.Response(200, json={'service': 'dobao-local-api', 'status': 'running',
+                                            'credential_configured': True, 'upstream_verified': True})
+        assert request.method == 'POST' and request.url.path == '/tts'
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, content=audio)
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: original(
+        transport=httpx.MockTransport(handle), **kwargs,
+    ))
+    monkeypatch.setattr(playback, 'play_bytes', played.append)
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def preceding():
+        started.set()
+        await release.wait()
+
+    first = asyncio.create_task(playback.play_job_async(preceding))
+    await started.wait()
+    old = asyncio.create_task(speak_template('{user_name}说{message}', user_name='Alice', message='hello'))
+    await asyncio.sleep(0)
+    assert playback.audio_queue.qsize() == 1 and not requests
+    routes.gptSovitsUserModels.value = {'Alice': {'service': 'dobao_tts', 'voice': 'taozi'}}
+    routes.aliasDict.value = {'Alice': '桃桃'}
+    new = asyncio.create_task(speak_template('{user_name}说{message}', user_name='Alice', message='hello'))
+    release.set()
+    try:
+        results = await asyncio.wait_for(asyncio.gather(first, old, new), 2)
+    finally:
+        release.set()
+    assert results == [None, None, None]
+    assert [(item['voice'], item['text']) for item in requests] == [
+        (CLASSIC_DOBAO_VOICE, '小桃说你好'), (DEFAULT_DOBAO_VOICE, '桃桃说你好'),
+    ]
+    assert played == [audio, audio]
+    assert routes.activeTTS.value == 'fish_audio'
+    assert routes.dobaoVoice.value == 'taozi'
 
 
 @pytest.mark.asyncio

@@ -28,7 +28,8 @@ def user_voice_binding(username: str) -> dict | None:
     if not isinstance(binding, dict) or not binding or not binding.get('enabled', True):
         return None
     service = binding.get('service', ServiceType.GPT_SOVITS)
-    if service not in (ServiceType.DOTS, ServiceType.GPT_SOVITS, ServiceType.FISH_AUDIO):
+    if service not in (ServiceType.DOTS, ServiceType.GPT_SOVITS, ServiceType.FISH_AUDIO, ServiceType.SEED_TTS,
+                       ServiceType.DOBAO):
         return None
     result = deepcopy(binding)
     result['service'] = str(service)
@@ -55,7 +56,7 @@ def user_model_overrides(username: str) -> dict | None:
 
 def service_for_user(username: str):
     """Snapshot a user's adapter; availability is checked inside the FIFO slot."""
-    from tts_service import DotsTTSService, FishAudioService, GPTSovitsService, get_tts_service
+    from tts_service import DoBaoTTSService, DotsTTSService, FishAudioService, GPTSovitsService, SeedTTSService, get_tts_service
 
     binding = user_voice_binding(username)
     if binding is None:
@@ -64,4 +65,8 @@ def service_for_user(username: str):
         return DotsTTSService()
     if binding['service'] == ServiceType.FISH_AUDIO:
         return FishAudioService(reference_id=binding.get('reference_id', ''))
+    if binding['service'] == ServiceType.SEED_TTS:
+        return SeedTTSService(speaker=binding.get('speaker'))
+    if binding['service'] == ServiceType.DOBAO:
+        return DoBaoTTSService(voice=binding.get('voice'))
     return GPTSovitsService(overrides=user_model_overrides(username))

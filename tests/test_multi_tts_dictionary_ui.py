@@ -18,7 +18,7 @@ def editor(config, monkeypatch):
     from gui.view import user_dictionary
 
     names = [name for name in dir(config) if name.startswith('gptSovits')]
-    names += ['fishAudioVoices', 'fishAudioReferenceId']
+    names += ['fishAudioVoices', 'fishAudioReferenceId', 'seedTtsVoice', 'dobaoVoice', 'dobaoApiUrl']
     saved = {name: deepcopy(getattr(config, name).value) for name in names}
     config.activeTTS.value = 'fish_audio'
     config.gptSovitsUserModels.value = {}
@@ -54,19 +54,24 @@ def select_service(widget, kind):
 
 
 def test_visible_services_and_conditional_fields_allow_offline_preconfiguration(editor):
+    from core.dobao_voices import CLASSIC_DOBAO_VOICE
     cfg, widget = editor
     assert {widget.service.itemData(i) for i in range(widget.service.count())} == {
-        'gpt_sovits', 'dots_tts', 'fish_audio',
+        'gpt_sovits', 'dots_tts', 'fish_audio', 'dobao_tts',
     }
     assert widget.form.isEnabled()
-    for service in ('dots_tts', 'fish_audio', 'gpt_sovits'):
+    for service in ('dots_tts', 'fish_audio', 'gpt_sovits', 'dobao_tts'):
         select_service(widget, service)
         assert widget.models.isHidden() is (service != 'gpt_sovits')
         assert widget.fishVoices.isHidden() is (service != 'fish_audio')
+        assert not hasattr(widget, 'seedSpeaker')
+        assert widget.dobaoVoices.isHidden() is (service != 'dobao_tts')
         assert widget.dotsModel.isHidden() is (service != 'dots_tts')
         widget.username.setText(service)
         if service == 'fish_audio':
             widget.fishVoices.setCurrentIndex(widget.fishVoices.findData(VOICE))
+        elif service == 'dobao_tts':
+            widget.dobaoVoices.setCurrentIndex(widget.dobaoVoices.findData(CLASSIC_DOBAO_VOICE))
         widget.save()
         assert cfg.gptSovitsUserModels.value[service]['service'] == service
     assert cfg.activeTTS.value == 'fish_audio'
@@ -134,6 +139,60 @@ def test_fish_binding_requires_saved_voice_and_refreshes_named_list(editor):
     assert cfg.gptSovitsUserModels.value == previous
 
 
+def test_dobao_binding_saves_per_user_voice_and_preserves_legacy_seed(editor):
+    from core.dobao_voices import get_dobao_voices, dobao_voice_name, DEFAULT_DOBAO_VOICE, CLASSIC_DOBAO_VOICE
+
+    cfg, widget = editor
+    select_service(widget, 'dobao_tts')
+    widget.username.setText('Alice')
+    catalog = get_dobao_voices()
+    assert {widget.dobaoVoices.itemData(i) for i in range(widget.dobaoVoices.count())} == {v['id'] for v in catalog}
+    choice = next(voice for voice in catalog if voice['id'] not in (DEFAULT_DOBAO_VOICE, CLASSIC_DOBAO_VOICE))
+    widget.dobaoVoices.setCurrentIndex(widget.dobaoVoices.findData(choice['id']))
+    widget.save()
+    assert cfg.gptSovitsUserModels.value['Alice'] == {
+        'service': 'dobao_tts', 'enabled': True,
+        'voice': choice['id'], 'label': choice['name'],
+    }
+    cfg.dobaoVoice.value = 'taozi'
+    widget.edit('Alice')
+    assert widget.dobaoVoices.currentData() == choice['id']
+    assert cfg.dobaoVoice.value == 'taozi'
+
+    alias_binding = {'service': 'dobao_tts', 'voice': 'taozi-classic', 'enabled': False}
+    cfg.gptSovitsUserModels.value = {'Alice': alias_binding}
+    widget.edit('Alice')
+    assert widget.dobaoVoices.currentData() == CLASSIC_DOBAO_VOICE
+    assert cfg.gptSovitsUserModels.value['Alice'] == alias_binding
+    widget.save()
+    assert cfg.gptSovitsUserModels.value['Alice']['voice'] == CLASSIC_DOBAO_VOICE
+    assert cfg.gptSovitsUserModels.value['Alice']['label'] == dobao_voice_name(CLASSIC_DOBAO_VOICE)
+    assert cfg.gptSovitsUserModels.value['Alice']['enabled'] is False
+
+    unknown = {'service': 'dobao_tts', 'voice': 'future-saved-voice', 'enabled': True}
+    cfg.gptSovitsUserModels.value = {'Alice': unknown}
+    widget.edit('Alice')
+    assert widget.dobaoVoices.currentData() == 'future-saved-voice'
+    assert '目录未收录' in widget.dobaoVoices.currentText()
+    assert cfg.gptSovitsUserModels.value['Alice'] == unknown
+    widget.save()
+    assert cfg.gptSovitsUserModels.value['Alice']['voice'] == 'future-saved-voice'
+
+    legacy = {'service': 'seed_tts', 'speaker': 'legacy-speaker', 'enabled': True}
+    peach = deepcopy(cfg.gptSovitsUserModels.value['Alice'])
+    cfg.gptSovitsUserModels.value = {'Alice': peach, 'OldUser': legacy}
+    widget.reload_rows()
+    assert widget.rows.count() == 1
+    assert set(widget.userSwitches) == {'Alice'}
+    assert cfg.gptSovitsUserModels.value == {'Alice': peach, 'OldUser': legacy}
+    widget.edit('OldUser')
+    assert widget.service.currentData() is None
+    assert '旧服务已隐藏' in widget.status.text()
+    assert not hasattr(widget, 'seedSpeaker')
+    widget.save()
+    assert cfg.gptSovitsUserModels.value['OldUser'] == legacy
+
+
 def test_gpt_reference_validation_and_legacy_mapping_edit(editor, monkeypatch):
     from gui.view import user_dictionary
 
@@ -166,7 +225,7 @@ async def test_manual_check_is_concurrent_cloud_free_and_does_not_change_selecte
 
     async def probe(kind, url, *, force=False):
         calls.append((kind, url, force))
-        if len(calls) == 2:
+        if len(calls) == 3:
             both_started.set()
         await release.wait()
         return SimpleNamespace(available=kind == 'dots_tts', detail='测试状态')
@@ -178,7 +237,7 @@ async def test_manual_check_is_concurrent_cloud_free_and_does_not_change_selecte
     select_service(widget, 'fish_audio')
     release.set()
     await task
-    assert {kind for kind, _, _ in calls} == {'dots_tts', 'gpt_sovits'}
+    assert {kind for kind, _, _ in calls} == {'dots_tts', 'gpt_sovits', 'dobao_tts'}
     assert all(force for _, _, force in calls)
     assert widget.service.currentData() == 'fish_audio'
     assert cfg.activeTTS.value == 'fish_audio'
@@ -222,11 +281,12 @@ async def test_late_local_status_cannot_override_changed_endpoint_or_closed_widg
 
 
 def test_dictionary_page_integrated_persistence_and_narrow_layout(editor):
-    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtCore import QCoreApplication, QEvent
     from PySide6.QtGui import QFontDatabase
     from PySide6.QtTest import QTest
     from core.const import DATA_DIR
     from gui.view.settings import SettingsInterface
+    from core.dobao_voices import get_dobao_voices, DEFAULT_DOBAO_VOICE, CLASSIC_DOBAO_VOICE
 
     cfg, _ = editor
     for font in ('segoeui.ttf', 'msyh.ttc'):
@@ -259,6 +319,19 @@ def test_dictionary_page_integrated_persistence_and_narrow_layout(editor):
     select_service(widget, 'dots_tts')
     QCoreApplication.processEvents()
     assert page.grab().save(str(output / 'dictionary-dots.png'))
+    select_service(widget, 'dobao_tts')
+    choice = next(voice for voice in get_dobao_voices()
+                  if voice['id'] not in (DEFAULT_DOBAO_VOICE, CLASSIC_DOBAO_VOICE))
+    widget.dobaoVoices.setCurrentIndex(widget.dobaoVoices.findData(choice['id']))
+    widget.username.setText('豆包测试用户')
+    widget.save()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    QCoreApplication.processEvents()
+    assert widget.dobaoVoices.geometry().right() < widget.bind.geometry().left()
+    assert page.scroll.horizontalScrollBar().maximum() == 0
+    final_output = Path(__file__).resolve().parents[1] / 'outputs' / 'doubao-validation-20260926'
+    final_output.mkdir(parents=True, exist_ok=True)
+    assert page.grab().save(str(final_output / 'dictionary-doubao-full-voices.png'))
     select_service(widget, 'gpt_sovits')
     widget.models.setItemText(0, '一个很长的角色模型名称用于验证窄窗口不会横向溢出' * 4)
     widget.models.setCurrentIndex(-1)
@@ -268,6 +341,7 @@ def test_dictionary_page_integrated_persistence_and_narrow_layout(editor):
     assert page.scroll.horizontalScrollBar().maximum() == 0
     assert page.grab().save(str(output / 'dictionary-gpt.png'))
     widget.remove('测试用户')
+    widget.remove('豆包测试用户')
     assert cfg.gptSovitsUserModels.value == {}
     page.deleteLater()
     settings.deleteLater()

@@ -61,6 +61,52 @@ async def test_dots_confirms_model_ready_and_service_identity(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('overrides,available,detail', [
+    ({}, True, '登录信息已配置'),
+    ({'upstream_verified': False}, True, '首次合成'),
+    ({'credential_configured': False}, False, '尚未登录'),
+    ({'upstream_paused': {'code': 'UPSTREAM_BLOCKED'}}, False, '已暂停'),
+    ({'service': 'unrelated'}, False, '不是兼容'),
+    ({'status': 'stopped'}, False, '不是兼容'),
+])
+async def test_dobao_local_health_requires_login_and_unpaused_state(monkeypatch, overrides, available, detail):
+    document = {'service': 'dobao-local-api', 'status': 'running', 'credential_configured': True,
+                'upstream_verified': True, 'upstream_paused': None}
+    document.update(overrides)
+    calls = mock_http(monkeypatch, lambda _: httpx.Response(200, json=document))
+    result = await availability.check_service_availability('dobao_tts', 'http://127.0.0.1:9882/tts/')
+    assert result.available is available
+    assert detail in result.detail
+    assert [call.url.path for call in calls] == ['/health']
+
+
+@pytest.mark.asyncio
+async def test_doubao_force_refresh_observes_stop_and_restart_without_synthesis(monkeypatch):
+    ready = True
+
+    def handle(request):
+        if not ready:
+            raise httpx.ConnectError('test-only-private-value', request=request)
+        return httpx.Response(200, json={
+            'service': 'dobao-local-api', 'status': 'running',
+            'credential_configured': True, 'upstream_paused': None,
+        })
+
+    calls = mock_http(monkeypatch, handle)
+    check = lambda **kwargs: availability.check_service_availability(
+        'dobao_tts', 'http://127.0.0.1:9882', **kwargs,
+    )
+    assert (await check()).available
+    ready = False
+    assert (await check()).available  # UI status can use its short cache.
+    result = await check(force=True)
+    assert not result.available and 'test-only-private-value' not in result.detail
+    ready = True
+    assert (await check(force=True)).available
+    assert [request.url.path for request in calls] == ['/health'] * 3
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('loaded,status', [(False, 'loading'), (False, 'ok'), (True, 'loading'), (1, 'ok')])
 async def test_dots_rejects_unready_model(monkeypatch, loaded, status):
     mock_http(monkeypatch, lambda r: dots_response(r, loaded=loaded, status=status))

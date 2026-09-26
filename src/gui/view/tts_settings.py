@@ -31,6 +31,7 @@ class TTSSettingsInterface(QWidget):
             ServiceType.DOTS: settings.dotsGroup,
             ServiceType.GPT_SOVITS: settings.gptSovitsGroup,
             ServiceType.FISH_AUDIO: settings.fishAudioGroup,
+            ServiceType.DOBAO: settings.dobaoGroup,
         }
         for group in (settings.minimaxGroup, settings.fishSpeechGroup, settings.piperGroup, settings.edgeGroup):
             group.hide()

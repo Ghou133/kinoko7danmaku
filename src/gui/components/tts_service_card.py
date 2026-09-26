@@ -27,4 +27,10 @@ class TTSServiceCard(SettingCard):
 
     def sync(self, value):
         with QSignalBlocker(self.comboBox):
-            self.comboBox.setCurrentIndex(self.comboBox.findData(value))
+            index = self.comboBox.findData(value)
+            if index < 0:
+                self.comboBox.setPlaceholderText('旧服务已隐藏，请选择默认服务')
+                self.setContent('当前保存的服务已隐藏；配置仍保留，请选择新的默认服务。')
+            else:
+                self.setContent('与 TTS 设置同步保存；调整用于下一次试听和后续弹幕。')
+            self.comboBox.setCurrentIndex(index)
