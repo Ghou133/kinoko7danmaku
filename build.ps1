@@ -1,44 +1,53 @@
-# PowerShell 打包脚本
-# 使用 PyInstaller 打包 Kinoko7Danmaku 项目
+# Build one Windows executable and replace the copy in the project root.
+# PyInstaller's intermediate files always stay in the same ignored build/ tree.
+$ErrorActionPreference = 'Stop'
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "   Kinoko7Danmaku PyInstaller 打包工具" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
+$projectRoot = $PSScriptRoot
+$targetExe = Join-Path $projectRoot 'Kinoko7Danmaku.exe'
+$buildRoot = Join-Path $projectRoot 'build'
+$packageDir = Join-Path $buildRoot 'package'
+$workDir = Join-Path $buildRoot 'pyinstaller'
+$builtExe = Join-Path $packageDir 'Kinoko7Danmaku.exe'
 
-# 清理之前的构建产物
-Write-Host "[1/3] 清理旧的构建文件..." -ForegroundColor Yellow
-if (Test-Path "build") {
-    Remove-Item -Recurse -Force "build"
-    Write-Host "  ✓ 已删除 build 目录" -ForegroundColor Green
-}
-if (Test-Path "dist") {
-    Remove-Item -Recurse -Force "dist"
-    Write-Host "  ✓ 已删除 dist 目录" -ForegroundColor Green
-}
-Write-Host ""
-
-# 运行 PyInstaller
-Write-Host "[2/3] 运行 PyInstaller（单文件模式）..." -ForegroundColor Yellow
-uv run pyinstaller kinoko7danmaku.spec
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host ""
-    Write-Host "✗ 打包失败！" -ForegroundColor Red
-    exit 1
+$running = Get-Process -Name 'Kinoko7Danmaku' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -ieq $targetExe }
+if ($running) {
+    throw '请先退出正在运行的项目根目录 Kinoko7Danmaku.exe，再重新打包。'
 }
 
-Write-Host ""
-Write-Host "[3/3] 打包完成！" -ForegroundColor Green
-Write-Host ""
-Write-Host "可执行文件位置：" -ForegroundColor Cyan
-Write-Host "  dist/Kinoko7Danmaku.exe" -ForegroundColor White
-Write-Host ""
-Write-Host "使用方法：" -ForegroundColor Cyan
-Write-Host "  直接双击 Kinoko7Danmaku.exe 运行" -ForegroundColor White
-Write-Host ""
-Write-Host "注意：" -ForegroundColor Yellow
-Write-Host "  - 单文件模式首次启动较慢（需要解压）" -ForegroundColor White
-Write-Host "  - 所有资源已打包进 exe 文件" -ForegroundColor White
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
+Push-Location $projectRoot
+try {
+    & uv run --locked pyinstaller --noconfirm --clean --distpath $packageDir --workpath $workDir kinoko7danmaku.spec
+    if ($LASTEXITCODE -ne 0) {
+        throw "PyInstaller 打包失败，原有的 $targetExe 保持不变。"
+    }
+    if (-not (Test-Path -LiteralPath $builtExe -PathType Leaf)) {
+        throw "打包完成后没有找到 $builtExe，原有主程序保持不变。"
+    }
+
+    $builtHash = (Get-FileHash -LiteralPath $builtExe -Algorithm SHA256).Hash
+    $backupExe = Join-Path $buildRoot ("Kinoko7Danmaku-previous-$([guid]::NewGuid().ToString('N')).exe")
+    try {
+        if (Test-Path -LiteralPath $targetExe -PathType Leaf) {
+            [System.IO.File]::Replace($builtExe, $targetExe, $backupExe)
+        } else {
+            [System.IO.File]::Move($builtExe, $targetExe)
+        }
+    } catch {
+        throw "无法覆盖 $targetExe。请先退出正在运行的程序；原有主程序保持不变。$($_.Exception.Message)"
+    }
+
+    $targetHash = (Get-FileHash -LiteralPath $targetExe -Algorithm SHA256).Hash
+    if ($targetHash -ne $builtHash) {
+        throw "主程序校验失败，请检查 $targetExe；旧版备份在 $backupExe。"
+    }
+    if (Test-Path -LiteralPath $backupExe -PathType Leaf) {
+        Remove-Item -LiteralPath $backupExe -Force
+    }
+
+    Write-Host "已更新 $targetExe"
+    Write-Host "SHA-256: $targetHash"
+    Write-Host '今后直接双击项目根目录的 Kinoko7Danmaku.exe。'
+} finally {
+    Pop-Location
+}

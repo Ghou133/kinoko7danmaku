@@ -36,18 +36,16 @@ jobs:
           echo "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Install dependencies
-        run: |
-          uv sync --dev
-          uv add pyinstaller
+        run: uv sync --locked --dev
 
       - name: Build with PyInstaller
-        run: uv run pyinstaller kinoko7danmaku.spec
+        run: pwsh -NoProfile -File ./build.ps1
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Kinoko7Danmaku
-          path: dist/Kinoko7Danmaku.exe
+          path: Kinoko7Danmaku.exe
           retention-days: 30
 
   release:
@@ -64,7 +62,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref }}
+          tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           files: Kinoko7Danmaku.exe
           draft: false

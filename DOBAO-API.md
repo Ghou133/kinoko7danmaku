@@ -1,6 +1,6 @@
 # Doubao 语音
 
-先安装带有 `local-api/server.mjs` 和 `runtime/node.exe` 的 DoBao-TTS-Win。从源码运行弹幕程序时，先运行 `uv sync` 安装依赖，再双击 `start.bat`。需要 Doubao 时，在 **TTS 设置 → TTS 服务** 中选择 **Doubao**，在下方点击 **启动 / 检查 API**。
+先安装带有 `local-api/server.mjs` 和 `runtime/node.exe` 的 DoBao-TTS-Win。双击 `Kinoko7Danmaku.exe` 运行弹幕程序；从源码运行时，先运行 `uv sync`，再运行 `uv run src/main.py`。需要 Doubao 时，在 **TTS 设置 → TTS 服务** 中选择 **Doubao**，在下方点击 **启动 / 检查 API**。
 
 - 打开弹幕程序不会自动启动 Doubao，也不要求先运行单独的脚本。
 - 已运行时只检查状态；未运行时在后台启动本地接口。没有登录或上游暂停时会显示对应提示。
@@ -14,6 +14,6 @@
 
 该接口将文本发送给豆包在线合成，返回完整音频后播放。请求依次处理并保持间隔；繁忙时可能积压，单条失败不自动重试。旧 Seed-TTS 的所有界面选项已隐藏，原配置和旧绑定保留。需要替换旧绑定时，用相同用户名保存新的 Doubao 绑定即可。
 
-`start_dobao.bat` 仅转到普通启动入口，不会单独启动 API。
+以后直接双击项目根目录的 `Kinoko7Danmaku.exe`，本地 API 仍由程序内的按钮按需启动。
 
 其他程序调用方式见 DoBao-TTS-Win 的 `local-api/README.md`。Cookie 只保存在本地 API 目录，不存入弹幕程序配置。

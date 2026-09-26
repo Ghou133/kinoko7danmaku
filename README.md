@@ -4,8 +4,8 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python)](https://www.python.org/)
-[![上游 Build and Release](https://github.com/MerlinCN/kinoko7danmaku/actions/workflows/pyinstaller.yml/badge.svg)](https://github.com/MerlinCN/kinoko7danmaku/actions/workflows/pyinstaller.yml)
-[![上游 Release](https://img.shields.io/github/v/release/MerlinCN/kinoko7danmaku)](https://github.com/MerlinCN/kinoko7danmaku/releases)
+[![Build and Release](https://github.com/Ghou133/kinoko7danmaku/actions/workflows/pyinstaller.yml/badge.svg)](https://github.com/Ghou133/kinoko7danmaku/actions/workflows/pyinstaller.yml)
+[![Release](https://img.shields.io/github/v/release/Ghou133/kinoko7danmaku)](https://github.com/Ghou133/kinoko7danmaku/releases)
 
 </div>
 
@@ -14,7 +14,7 @@
 ## 本地增强版
 
 新增 dots.tts 原生 HTTP/流式播放、Fish Audio 和 Doubao 语音播报、按用户名选择服务与音色、用户名与消息独立字典、关键词音频混播。
-请先阅读 [新增功能说明](新增功能说明.md)。Windows 可双击 `start.bat` 启动。
+请先阅读 [新增功能说明](新增功能说明.md)。Windows 可直接双击项目根目录的 `Kinoko7Danmaku.exe` 启动。
 
 ## 特性
 
@@ -56,7 +56,7 @@ uv run src/main.py
 
 ### Windows 用户
 
-本分支的增强功能可从源码运行；如需 Windows 可执行文件，可运行 `build.ps1` 自行打包。[上游 Releases](https://github.com/MerlinCN/kinoko7danmaku/releases) 提供上游版本。
+从[本项目 Releases](https://github.com/Ghou133/kinoko7danmaku/releases) 下载 `Kinoko7Danmaku.exe` 后可直接双击运行。开发时运行 `build.ps1`，成功后会覆盖项目根目录的同名文件；构建失败时保留原文件。运行中的程序需要先退出才能覆盖。
 
 ## 支持的 TTS 服务
 
